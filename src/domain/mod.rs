@@ -15,15 +15,157 @@ pub mod pet;
 pub mod town;
 pub mod user;
 
+use crate::actor::PlayerSessionActor;
+use crate::amf3::Amf3Value;
+use crate::data::DataStore;
+use crate::gateway::{ConnectionSession, authorize_rpc_call, encode_babeltime_response};
+use std::path::Path;
+
+/// Dispatch a decoded `BabelTimeSocket` AMF3 request object (`{ method, args, token, callback }`)
+/// and return the framed response bytes ready to send over TCP `:8002` or WebSocket `:8003`.
+pub fn dispatch_client_rpc(
+    session: &mut ConnectionSession,
+    actor_slot: &mut Option<PlayerSessionActor>,
+    store: &DataStore,
+    persist_path: Option<&Path>,
+    req_val: &Amf3Value,
+    now_unix: u64,
+) -> Result<Vec<u8>, &'static str> {
+    let method_full = req_val
+        .get_field("method")
+        .and_then(|v| v.as_str())
+        .ok_or("close: missing method field")?;
+    let (clazz, method) = authorize_rpc_call(session, method_full)?;
+    let args: &[Amf3Value] = match req_val.get_field("args") {
+        Some(Amf3Value::Array { dense, .. }) => dense.as_slice(),
+        _ => &[],
+    };
+    let now_i32 = (now_unix.min(i32::MAX as u64)) as i32;
+
+    let ret_val = match (clazz, method) {
+        ("gm", "getTime") => Amf3Value::Integer(now_i32),
+        ("gm", "reportClientError") => Amf3Value::String("ok".to_string()),
+        ("user", "login") => user::rpc_user_login_amf(session, args, now_unix),
+        ("user", "getUsers") => user::rpc_get_users(session, store)?,
+        ("user", "getRandomName") => {
+            let num = args
+                .first()
+                .and_then(|v| v.as_i64())
+                .unwrap_or(10)
+                .clamp(1, 20) as usize;
+            let gender = args.get(1).and_then(|v| v.as_i64()).unwrap_or(1) as u8;
+            user::rpc_get_random_name(store, num, gender)
+        }
+        ("user", "createUser") => {
+            let utid = args.first().and_then(|v| v.as_i64()).unwrap_or(1) as u8;
+            let uname = args.get(1).and_then(|v| v.as_str()).unwrap_or("");
+            let (_uid, res) = user::rpc_create_user(session, store, utid, uname)?;
+            if res == Amf3Value::String("ok".to_string()) {
+                if let Some(p) = persist_path {
+                    let _ = store.save_to_disk(p);
+                }
+            }
+            res
+        }
+        ("user", "userLogin") => {
+            let uid = args.first().and_then(|v| v.as_i64()).unwrap_or(0) as u32;
+            let (actor, res) = user::rpc_user_character_login(session, store, uid)?;
+            *actor_slot = Some(actor);
+            res
+        }
+        ("user", "getUser") => {
+            if let Some(actor) = actor_slot.as_ref() {
+                user::rpc_get_user_info(actor, now_i32)
+            } else {
+                return Err("close: missing PlayerSessionActor on user.getUser");
+            }
+        }
+        ("user", "getVaConfig") => Amf3Value::dense_list([]),
+        ("user", "setVaConfig" | "setMute" | "setVisibleCount" | "showDress") => {
+            Amf3Value::String("ok".to_string())
+        }
+        ("user", "getSwitch" | "getSwitchInfo") | ("switch", "getSwitchInfo") => {
+            Amf3Value::dense_list([])
+        }
+        ("bag", "bagInfo") => bag::PlayerBag::new(24).to_amf3(),
+        ("formation", "getFormation" | "getAllFormation" | "getSquad") => {
+            let uid = session.uid.unwrap_or(20001) as i32;
+            let master_hid = uid * 100 + 1;
+            Amf3Value::assoc_map([(
+                "10001",
+                Amf3Value::assoc_map([
+                    ("fid", Amf3Value::Integer(10001)),
+                    ("level", Amf3Value::Integer(1)),
+                    ("is_open", Amf3Value::Integer(1)),
+                    ("hid0", Amf3Value::Integer(master_hid)),
+                ]),
+            )])
+        }
+        ("hero", "getRecruitHeroes" | "getPubHeroes" | "getAllHeroes" | "getHeroes") => {
+            let uid = session.uid.unwrap_or(20001) as i32;
+            let utid = session.utid.unwrap_or(1);
+            let master_hid = uid * 100 + 1;
+            let master_htid = user::master_htid_for_utid(utid);
+            Amf3Value::assoc_map([(
+                master_hid.to_string(),
+                Amf3Value::assoc_map([
+                    ("hid", Amf3Value::Integer(master_hid)),
+                    ("htid", Amf3Value::Integer(master_htid)),
+                    ("level", Amf3Value::Integer(1)),
+                    ("exp", Amf3Value::Integer(0)),
+                    ("curr_hp", Amf3Value::Integer(1000)),
+                ]),
+            )])
+        }
+        ("task", "getAllTask") => Amf3Value::assoc_map([
+            ("accept", Amf3Value::dense_list([])),
+            ("complete", Amf3Value::dense_list([])),
+            ("va_task", Amf3Value::dense_list([])),
+        ]),
+        ("mail", "getNoReadMailCount") => Amf3Value::Integer(0),
+        ("city", "checkEnter") => Amf3Value::Bool(true),
+        ("city" | "town", "enterTown") => {
+            let town_id = args.first().and_then(|v| v.as_i64()).unwrap_or(1) as u32;
+            let x = args.get(1).and_then(|v| v.as_i64()).unwrap_or(19) as u16;
+            let y = args.get(2).and_then(|v| v.as_i64()).unwrap_or(25) as u16;
+            if let Some(actor) = actor_slot.as_mut() {
+                let _ = town::move_in_town(actor, town_id, x, y);
+            }
+            session.town_id = Some(town_id);
+            Amf3Value::String("ok".to_string())
+        }
+        ("city" | "town", "move" | "moveInTown") => {
+            let x = args.first().and_then(|v| v.as_i64()).unwrap_or(19) as u16;
+            let y = args.get(1).and_then(|v| v.as_i64()).unwrap_or(25) as u16;
+            let town_id = session.town_id.unwrap_or(1);
+            if let Some(actor) = actor_slot.as_mut() {
+                town::move_in_town(actor, town_id, x, y)
+            } else {
+                Amf3Value::assoc_map([
+                    ("ret", Amf3Value::String("ok".to_string())),
+                    ("x", Amf3Value::Integer(x as i32)),
+                    ("y", Amf3Value::Integer(y as i32)),
+                ])
+            }
+        }
+        ("city" | "town", "enterTownList" | "getEnterTownList") => {
+            Amf3Value::dense_list([Amf3Value::Integer(1)])
+        }
+        ("city" | "town", "leaveTown") => Amf3Value::String("ok".to_string()),
+        _ => Amf3Value::dense_list([]),
+    };
+
+    Ok(encode_babeltime_response(req_val, "ok", ret_val, now_i32))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::amf3::Amf3Value;
     use crate::battle::{FormationGrid, HeroUnit};
     use crate::btstore::StaticBtstore;
     use crate::crypt::{babel_encrypt_number, compute_login_play_hash};
-    use crate::data::{DataStore, SqlDialect};
-    use crate::gateway::ConnectionSession;
+    use crate::data::SqlDialect;
+    use crate::gateway::decode_framed_packet;
     use std::collections::BTreeMap;
 
     #[test]
@@ -147,5 +289,160 @@ mod tests {
         // 6. Flush Write-Behind delta from `PlayerSessionActor` to `DataStore`
         let delta = actor.take_dirty_delta().expect("expected dirty delta");
         assert_eq!(store.apply_write_behind_delta(&delta), 1);
+    }
+
+    #[test]
+    fn test_babeltime_socket_rpc_login_and_character_registration_flow() {
+        let store = DataStore::new(SqlDialect::SqliteWal);
+        let mut session = ConnectionSession::default();
+        let mut actor_slot = None;
+
+        // 1. `user.login` from `T9NuoYa.html?sid=202621270`
+        let req_login = Amf3Value::assoc_map([
+            ("method", Amf3Value::String("user.login".to_string())),
+            (
+                "args",
+                Amf3Value::dense_list([Amf3Value::assoc_map([(
+                    "pid",
+                    Amf3Value::String("202621270".to_string()),
+                )])]),
+            ),
+            ("token", Amf3Value::String("1".to_string())),
+            (
+                "callback",
+                Amf3Value::assoc_map([
+                    ("callbackName", Amf3Value::String("re.user.login".to_string())),
+                    ("callbackParameID", Amf3Value::Integer(1)),
+                ]),
+            ),
+        ]);
+        let pkt_login =
+            dispatch_client_rpc(&mut session, &mut actor_slot, &store, None, &req_login, 1700000000)
+                .expect("dispatch user.login failed");
+        let (_, dec_login) = decode_framed_packet(&pkt_login).expect("decode login response failed");
+        assert_eq!(session.pid, Some(202621270));
+        assert_eq!(dec_login.get_field("err").and_then(|v| v.as_str()), Some("ok"));
+
+        // 2. `user.getUsers` returns empty list before character registration
+        let req_get_users = Amf3Value::assoc_map([
+            ("method", Amf3Value::String("user.getUsers".to_string())),
+            ("args", Amf3Value::dense_list([])),
+            ("token", Amf3Value::String("2".to_string())),
+            (
+                "callback",
+                Amf3Value::assoc_map([("callbackName", Amf3Value::String("re.user.getUsers".to_string()))]),
+            ),
+        ]);
+        let pkt_users_empty = dispatch_client_rpc(
+            &mut session,
+            &mut actor_slot,
+            &store,
+            None,
+            &req_get_users,
+            1700000001,
+        )
+        .expect("dispatch user.getUsers failed");
+        let (_, dec_users_empty) = decode_framed_packet(&pkt_users_empty).unwrap();
+        if let Some(Amf3Value::Array { dense, .. }) = dec_users_empty.get_field("ret") {
+            let inner = &dense[0];
+            if let Some(Amf3Value::Array { dense: ulist, .. }) = inner.get_field("ret") {
+                assert!(ulist.is_empty());
+            } else {
+                panic!("expected empty dense user list");
+            }
+        }
+
+        // 3. `user.getRandomName` returns candidate names
+        let req_rand = Amf3Value::assoc_map([
+            ("method", Amf3Value::String("user.getRandomName".to_string())),
+            (
+                "args",
+                Amf3Value::dense_list([Amf3Value::Integer(5), Amf3Value::Integer(1)]),
+            ),
+            ("token", Amf3Value::String("3".to_string())),
+            (
+                "callback",
+                Amf3Value::assoc_map([(
+                    "callbackName",
+                    Amf3Value::String("re.user.getRandomName".to_string()),
+                )]),
+            ),
+        ]);
+        let _ = dispatch_client_rpc(&mut session, &mut actor_slot, &store, None, &req_rand, 1700000002)
+            .expect("dispatch user.getRandomName failed");
+
+        // 4. `user.createUser(1, "PortgasDAce")` registers character
+        let req_create = Amf3Value::assoc_map([
+            ("method", Amf3Value::String("user.createUser".to_string())),
+            (
+                "args",
+                Amf3Value::dense_list([
+                    Amf3Value::Integer(1),
+                    Amf3Value::String("PortgasDAce".to_string()),
+                ]),
+            ),
+            ("token", Amf3Value::String("4".to_string())),
+            (
+                "callback",
+                Amf3Value::assoc_map([(
+                    "callbackName",
+                    Amf3Value::String("re.user.createUser".to_string()),
+                )]),
+            ),
+        ]);
+        let _ = dispatch_client_rpc(
+            &mut session,
+            &mut actor_slot,
+            &store,
+            None,
+            &req_create,
+            1700000003,
+        )
+        .expect("dispatch user.createUser failed");
+
+        // 5. `user.userLogin(20001)` & `user.getUser()` enter game
+        let req_ulogin = Amf3Value::assoc_map([
+            ("method", Amf3Value::String("user.userLogin".to_string())),
+            ("args", Amf3Value::dense_list([Amf3Value::Integer(20001)])),
+            ("token", Amf3Value::String("5".to_string())),
+            (
+                "callback",
+                Amf3Value::assoc_map([(
+                    "callbackName",
+                    Amf3Value::String("re.user.userLogin".to_string()),
+                )]),
+            ),
+        ]);
+        let _ = dispatch_client_rpc(
+            &mut session,
+            &mut actor_slot,
+            &store,
+            None,
+            &req_ulogin,
+            1700000004,
+        )
+        .expect("dispatch user.userLogin failed");
+        assert_eq!(session.uid, Some(20001));
+
+        let req_get_user = Amf3Value::assoc_map([
+            ("method", Amf3Value::String("user.getUser".to_string())),
+            ("args", Amf3Value::dense_list([])),
+            ("token", Amf3Value::String("6".to_string())),
+            (
+                "callback",
+                Amf3Value::assoc_map([("callbackName", Amf3Value::String("re.user.getUser".to_string()))]),
+            ),
+        ]);
+        let pkt_get_user = dispatch_client_rpc(
+            &mut session,
+            &mut actor_slot,
+            &store,
+            None,
+            &req_get_user,
+            1700000005,
+        )
+        .expect("dispatch user.getUser failed");
+        let (_, dec_get_user) = decode_framed_packet(&pkt_get_user).unwrap();
+        assert_eq!(dec_get_user.get_field("err").and_then(|v| v.as_str()), Some("ok"));
     }
 }

@@ -212,18 +212,33 @@ fn encode_value(out: &mut Vec<u8>, val: &Amf3Value) {
             out.extend_from_slice(bytes);
         }
         Amf3Value::Array { assoc, dense } => {
-            out.push(MARKER_ARRAY);
-            write_u29(out, ((dense.len() as u32) << 1) | 1);
-            for (k, v) in assoc {
-                if !k.is_empty() {
-                    write_amf3_str(out, k);
-                    encode_value(out, v);
+            if !assoc.is_empty() && dense.is_empty() {
+                // Encode pure associative map as anonymous dynamic AS3 Object (`0x0A 0x0B 0x01 ... 0x01`)
+                // so ActionScript 3 (`Main.swf`) receives a native `Object` instead of an `Array`.
+                out.push(MARKER_OBJECT);
+                write_u29(out, 0x0B);
+                write_amf3_str(out, "");
+                for (k, v) in assoc {
+                    if !k.is_empty() {
+                        write_amf3_str(out, k);
+                        encode_value(out, v);
+                    }
                 }
-            }
-            // Empty string (`0x01`) terminates the associative key-value section.
-            write_amf3_str(out, "");
-            for item in dense {
-                encode_value(out, item);
+                write_amf3_str(out, "");
+            } else {
+                out.push(MARKER_ARRAY);
+                write_u29(out, ((dense.len() as u32) << 1) | 1);
+                for (k, v) in assoc {
+                    if !k.is_empty() {
+                        write_amf3_str(out, k);
+                        encode_value(out, v);
+                    }
+                }
+                // Empty string (`0x01`) terminates the associative key-value section.
+                write_amf3_str(out, "");
+                for item in dense {
+                    encode_value(out, item);
+                }
             }
         }
     }
@@ -232,20 +247,25 @@ fn encode_value(out: &mut Vec<u8>, val: &Amf3Value) {
 /// Decode an `Amf3Value` from raw bytes.
 ///
 /// Mirrors `Util::amfDecode` (`legacy-ref/rpcfw/lib/Util.class.php:492-513`):
-/// automatically accepts payloads with or without the leading `0x11` (`AMF3_PREFIX`) byte.
+/// automatically accepts payloads with or without the leading `0x11` (`AMF3_PREFIX`) byte,
+/// and maintains full AMF3 string, object, and trait reference tables for ActionScript 3 compatibility.
 pub fn amf3_decode(buf: &[u8]) -> Result<Amf3Value, &'static str> {
     if buf.is_empty() {
         return Err("empty AMF3 payload");
     }
     let mut pos = if buf[0] == AMF3_PREFIX { 1 } else { 0 };
     let mut str_refs = Vec::new();
-    decode_value(buf, &mut pos, &mut str_refs)
+    let mut obj_refs = Vec::new();
+    let mut trait_refs = Vec::new();
+    decode_value(buf, &mut pos, &mut str_refs, &mut obj_refs, &mut trait_refs)
 }
 
 fn decode_value(
     buf: &[u8],
     pos: &mut usize,
     str_refs: &mut Vec<String>,
+    obj_refs: &mut Vec<Amf3Value>,
+    trait_refs: &mut Vec<(bool, Vec<String>)>,
 ) -> Result<Amf3Value, &'static str> {
     if *pos >= buf.len() {
         return Err("unexpected EOF reading AMF3 marker");
@@ -282,45 +302,87 @@ fn decode_value(
         }
         MARKER_BYTE_ARRAY => {
             let header = read_u29(buf, pos)?;
+            if (header & 1) == 0 {
+                let idx = (header >> 1) as usize;
+                return obj_refs
+                    .get(idx)
+                    .cloned()
+                    .ok_or("invalid AMF3 ByteArray reference index");
+            }
             let len = (header >> 1) as usize;
             if *pos + len > buf.len() {
                 return Err("truncated AMF3 ByteArray");
             }
-            let bytes = buf[*pos..*pos + len].to_vec();
+            let val = Amf3Value::ByteArray(buf[*pos..*pos + len].to_vec());
             *pos += len;
-            Ok(Amf3Value::ByteArray(bytes))
+            obj_refs.push(val.clone());
+            Ok(val)
         }
         MARKER_ARRAY => {
             let header = read_u29(buf, pos)?;
+            if (header & 1) == 0 {
+                let idx = (header >> 1) as usize;
+                return obj_refs
+                    .get(idx)
+                    .cloned()
+                    .ok_or("invalid AMF3 Array reference index");
+            }
             let dense_len = (header >> 1) as usize;
+            let obj_slot = obj_refs.len();
+            obj_refs.push(Amf3Value::Null);
             let mut assoc = BTreeMap::new();
             loop {
                 let key = read_amf3_str(buf, pos, str_refs)?;
                 if key.is_empty() {
                     break;
                 }
-                let val = decode_value(buf, pos, str_refs)?;
+                let val = decode_value(buf, pos, str_refs, obj_refs, trait_refs)?;
                 assoc.insert(key, val);
             }
-            let mut dense = Vec::with_capacity(dense_len);
+            let mut dense = Vec::with_capacity(dense_len.min(4096));
             for _ in 0..dense_len {
-                dense.push(decode_value(buf, pos, str_refs)?);
+                dense.push(decode_value(buf, pos, str_refs, obj_refs, trait_refs)?);
             }
-            Ok(Amf3Value::Array { assoc, dense })
+            let result = Amf3Value::Array { assoc, dense };
+            obj_refs[obj_slot] = result.clone();
+            Ok(result)
         }
         MARKER_OBJECT => {
-            // Decode anonymous/typed AS3 Object (`0x0A`) into associative `Amf3Value::Array`
-            let traits = read_u29(buf, pos)?;
-            let is_dynamic = (traits & 0x08) != 0;
-            let prop_count = (traits >> 4) as usize;
-            let _class_name = read_amf3_str(buf, pos, str_refs)?;
-            let mut prop_names = Vec::with_capacity(prop_count);
-            for _ in 0..prop_count {
-                prop_names.push(read_amf3_str(buf, pos, str_refs)?);
+            let header = read_u29(buf, pos)?;
+            if (header & 1) == 0 {
+                let idx = (header >> 1) as usize;
+                return obj_refs
+                    .get(idx)
+                    .cloned()
+                    .ok_or("invalid AMF3 Object reference index");
             }
+            let obj_slot = obj_refs.len();
+            obj_refs.push(Amf3Value::Null);
+
+            let (is_dynamic, prop_names) = if (header & 2) == 0 {
+                let trait_idx = (header >> 2) as usize;
+                trait_refs
+                    .get(trait_idx)
+                    .cloned()
+                    .ok_or("invalid AMF3 Object trait reference index")?
+            } else {
+                if (header & 4) != 0 {
+                    return Err("unsupported externalizable AMF3 Object");
+                }
+                let is_dyn = (header & 8) != 0;
+                let prop_count = (header >> 4) as usize;
+                let _class_name = read_amf3_str(buf, pos, str_refs)?;
+                let mut names = Vec::with_capacity(prop_count.min(256));
+                for _ in 0..prop_count {
+                    names.push(read_amf3_str(buf, pos, str_refs)?);
+                }
+                trait_refs.push((is_dyn, names.clone()));
+                (is_dyn, names)
+            };
+
             let mut assoc = BTreeMap::new();
             for name in prop_names {
-                let val = decode_value(buf, pos, str_refs)?;
+                let val = decode_value(buf, pos, str_refs, obj_refs, trait_refs)?;
                 assoc.insert(name, val);
             }
             if is_dynamic {
@@ -329,14 +391,16 @@ fn decode_value(
                     if key.is_empty() {
                         break;
                     }
-                    let val = decode_value(buf, pos, str_refs)?;
+                    let val = decode_value(buf, pos, str_refs, obj_refs, trait_refs)?;
                     assoc.insert(key, val);
                 }
             }
-            Ok(Amf3Value::Array {
+            let result = Amf3Value::Array {
                 assoc,
                 dense: Vec::new(),
-            })
+            };
+            obj_refs[obj_slot] = result.clone();
+            Ok(result)
         }
         _ => Err("unsupported AMF3 marker"),
     }

@@ -393,6 +393,114 @@ pub fn verify_login_request(
     Ok((pid, ptype))
 }
 
+/// Pure-Rust FIPS 180-4 SHA-1 160-bit (20-byte) digest for RFC 6455 WebSocket handshakes
+/// and `Util::signVa` (`legacy-ref/rpcfw/lib/Util.class.php:485-490`).
+pub fn sha1_digest(data: &[u8]) -> [u8; 20] {
+    let mut h0: u32 = 0x6745_2301;
+    let mut h1: u32 = 0xEFCD_AB89;
+    let mut h2: u32 = 0x98BA_DCFE;
+    let mut h3: u32 = 0x1032_5476;
+    let mut h4: u32 = 0xC3D2_E1F0;
+
+    let bit_len = (data.len() as u64).wrapping_mul(8);
+    let mut msg = Vec::with_capacity(data.len() + 72);
+    msg.extend_from_slice(data);
+    msg.push(0x80);
+    while (msg.len() % 64) != 56 {
+        msg.push(0x00);
+    }
+    msg.extend_from_slice(&bit_len.to_be_bytes());
+
+    for chunk in msg.chunks_exact(64) {
+        let mut w = [0u32; 80];
+        for i in 0..16 {
+            let off = i * 4;
+            w[i] = u32::from_be_bytes([chunk[off], chunk[off + 1], chunk[off + 2], chunk[off + 3]]);
+        }
+        for i in 16..80 {
+            w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
+        }
+
+        let mut a = h0;
+        let mut b = h1;
+        let mut c = h2;
+        let mut d = h3;
+        let mut e = h4;
+
+        for (i, &wi) in w.iter().enumerate() {
+            let (f, k) = if i < 20 {
+                ((b & c) | ((!b) & d), 0x5A82_7999u32)
+            } else if i < 40 {
+                (b ^ c ^ d, 0x6ED9_EBA1u32)
+            } else if i < 60 {
+                ((b & c) | (b & d) | (c & d), 0x8F1B_BCDCu32)
+            } else {
+                (b ^ c ^ d, 0xCA62_C1D6u32)
+            };
+            let temp = a
+                .rotate_left(5)
+                .wrapping_add(f)
+                .wrapping_add(e)
+                .wrapping_add(k)
+                .wrapping_add(wi);
+            e = d;
+            d = c;
+            c = b.rotate_left(30);
+            b = a;
+            a = temp;
+        }
+
+        h0 = h0.wrapping_add(a);
+        h1 = h1.wrapping_add(b);
+        h2 = h2.wrapping_add(c);
+        h3 = h3.wrapping_add(d);
+        h4 = h4.wrapping_add(e);
+    }
+
+    let mut out = [0u8; 20];
+    out[0..4].copy_from_slice(&h0.to_be_bytes());
+    out[4..8].copy_from_slice(&h1.to_be_bytes());
+    out[8..12].copy_from_slice(&h2.to_be_bytes());
+    out[12..16].copy_from_slice(&h3.to_be_bytes());
+    out[16..20].copy_from_slice(&h4.to_be_bytes());
+    out
+}
+
+/// RFC 4648 standard Base64 encoder.
+pub fn base64_encode(data: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(((data.len() + 2) / 3) * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TABLE[((triple >> 18) & 0x3F) as usize] as char);
+        out.push(TABLE[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            out.push(TABLE[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(TABLE[(triple & 0x3F) as usize] as char);
+        } else {
+            out.push('=');
+        }
+    }
+    out
+}
+
+/// Compute the RFC 6455 `Sec-WebSocket-Accept` header value for a client `Sec-WebSocket-Key`.
+pub fn websocket_accept_key(sec_websocket_key: &str) -> String {
+    const WS_GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    let mut input = Vec::with_capacity(sec_websocket_key.len() + WS_GUID.len());
+    input.extend_from_slice(sec_websocket_key.trim().as_bytes());
+    input.extend_from_slice(WS_GUID.as_bytes());
+    let digest = sha1_digest(&input);
+    base64_encode(&digest)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

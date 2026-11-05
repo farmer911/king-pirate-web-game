@@ -313,6 +313,99 @@ impl DataStore {
             &[("uid", WhereCond::Eq(ColumnValue::Int(delta.uid as i64)))],
         )
     }
+
+    /// Persist all tables and `IdGenerator` sequences to disk using `amf3_encode` (`data/pirate_store.amf3`).
+    pub fn save_to_disk(&self, path: &std::path::Path) -> Result<(), &'static str> {
+        use crate::amf3::{Amf3Value, amf3_encode};
+        let guard = self.tables.read().map_err(|_| "tables read lock poisoned")?;
+        let mut tables_map = BTreeMap::new();
+        for (tname, rows) in guard.iter() {
+            let mut dense_rows = Vec::with_capacity(rows.len());
+            for row in rows {
+                let mut assoc_row = BTreeMap::new();
+                for (k, v) in row {
+                    let amf_v = match v {
+                        ColumnValue::Int(n) => Amf3Value::Integer(*n as i32),
+                        ColumnValue::Text(s) => Amf3Value::String(s.clone()),
+                        ColumnValue::Blob(b) => Amf3Value::ByteArray(b.clone()),
+                    };
+                    assoc_row.insert(k.clone(), amf_v);
+                }
+                dense_rows.push(Amf3Value::Array {
+                    assoc: assoc_row,
+                    dense: Vec::new(),
+                });
+            }
+            tables_map.insert(tname.clone(), Amf3Value::dense_list(dense_rows));
+        }
+        let root = Amf3Value::assoc_map([
+            (
+                "uid_seq",
+                Amf3Value::Integer(self.id_gen.uid_seq.load(Ordering::SeqCst) as i32),
+            ),
+            (
+                "hid_seq",
+                Amf3Value::Integer(self.id_gen.hid_seq.load(Ordering::SeqCst) as i32),
+            ),
+            (
+                "tables",
+                Amf3Value::Array {
+                    assoc: tables_map,
+                    dense: Vec::new(),
+                },
+            ),
+        ]);
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let bytes = amf3_encode(&root, false);
+        std::fs::write(path, bytes).map_err(|_| "failed to write DataStore snapshot to disk")
+    }
+
+    /// Restore all tables and `IdGenerator` sequences from a disk snapshot (`data/pirate_store.amf3`).
+    pub fn load_from_disk(&self, path: &std::path::Path) -> Result<usize, &'static str> {
+        use crate::amf3::{Amf3Value, amf3_decode};
+        if !path.exists() {
+            return Ok(0);
+        }
+        let bytes = std::fs::read(path).map_err(|_| "failed to read DataStore snapshot")?;
+        let root = amf3_decode(&bytes)?;
+        if let Some(uid_next) = root.get_field("uid_seq").and_then(|v| v.as_i64()) {
+            self.id_gen.uid_seq.store(uid_next as u64, Ordering::SeqCst);
+        }
+        if let Some(hid_next) = root.get_field("hid_seq").and_then(|v| v.as_i64()) {
+            self.id_gen.hid_seq.store(hid_next as u64, Ordering::SeqCst);
+        }
+        let mut total_rows = 0usize;
+        if let Some(Amf3Value::Array { assoc: tmap, .. }) = root.get_field("tables") {
+            let mut guard = self.tables.write().map_err(|_| "tables write lock poisoned")?;
+            guard.clear();
+            for (tname, tval) in tmap {
+                if let Amf3Value::Array { dense, .. } = tval {
+                    let mut table_rows = Vec::with_capacity(dense.len());
+                    for item in dense {
+                        if let Amf3Value::Array { assoc, .. } = item {
+                            let mut row = RowMap::new();
+                            for (k, v) in assoc {
+                                let col_v = match v {
+                                    Amf3Value::Integer(n) => ColumnValue::Int(*n as i64),
+                                    Amf3Value::Double(d) => ColumnValue::Int(*d as i64),
+                                    Amf3Value::String(s) => ColumnValue::Text(s.clone()),
+                                    Amf3Value::ByteArray(b) => ColumnValue::Blob(b.clone()),
+                                    _ => continue,
+                                };
+                                row.insert(k.clone(), col_v);
+                            }
+                            table_rows.push(row);
+                            total_rows += 1;
+                        }
+                    }
+                    guard.insert(tname.clone(), table_rows);
+                }
+            }
+        }
+        Ok(total_rows)
+    }
 }
 
 #[cfg(test)]

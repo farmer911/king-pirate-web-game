@@ -12,6 +12,4 @@ docs/
 graphify-out/
 legacy-ref/
 client-assets/
-data/*.db
-data/*.db-shm
-data/*.db-wal
+data/

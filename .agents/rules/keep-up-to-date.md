@@ -10,7 +10,7 @@ trigger: always_on
 1. **Added or Modified a Rust Module, Protocol, or Crate Dependency?**
    - Update the Component Inventory table in `GEMINI.md` and the phase checklist in `.agents/STATE.md`.
    - **Update the Corresponding Skill in `.agents/skills/`:**
-     - Always apply `engineering-audit-gate` (`.agents/skills/engineering-audit-gate/SKILL.md`: Reuse -> Delete Dead Code -> Optimize -> Propose Better) and `simplify` (`.agents/skills/simplify/SKILL.md`: Zero-fluff BLUF responses).
+     - Always apply `empirical-metrics-and-knowledge-tools`, `zero-defect-real-runtime-verification`, `engineering-audit-gate`, and `simplify`.
      - If you added/changed a core primitive in `src/` (`protocol.rs`, `amf3.rs`, `crypt.rs`, `data.rs`, `battle.rs`), update `.agents/skills/porting-legacy-to-rust/SKILL.md` (Quick Reference / Shared Primitives table) so future agents reuse it instead of duplicating code.
      - If you changed the knowledge graph pipeline or directory layout, update `.agents/skills/updating-project-knowledge/SKILL.md`.
      - If you changed the planning workflow or phase structure, update `.agents/skills/planning-with-archify/SKILL.md`.
