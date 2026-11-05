@@ -19,9 +19,49 @@ use crate::actor::PlayerSessionActor;
 use crate::amf3::Amf3Value;
 use crate::battle::{FormationGrid, HeroUnit};
 use crate::btstore::StaticBtstore;
-use crate::data::DataStore;
-use crate::gateway::{ConnectionSession, authorize_rpc_call, encode_babeltime_response};
+use crate::data::{ColumnValue, DataStore, WhereCond};
+use crate::gateway::{
+    ConnectionSession, authorize_rpc_call, encode_babeltime_response_with_modify,
+};
+use std::collections::BTreeMap;
 use std::path::Path;
+
+/// Load persisted `t_bag` items for `uid` into `PlayerBag` (`BagDao.class.php` & `Bag.class.php`).
+fn load_player_bag_from_store(store: &DataStore, uid: i64) -> bag::PlayerBag {
+    let mut pbag = bag::PlayerBag::new(24);
+    let rows = store.select(
+        "t_bag",
+        &["gid", "item_id", "item_template_id", "item_num", "reinforce_level"],
+        &[("uid", WhereCond::Eq(ColumnValue::Int(uid)))],
+        Some(200),
+    );
+    for r in rows {
+        let gid = r.get("gid").and_then(|v| v.as_i64()).unwrap_or(1) as u16;
+        let item_id = r.get("item_id").and_then(|v| v.as_i64()).unwrap_or(1) as u64;
+        let item_template_id = r
+            .get("item_template_id")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(101101) as u32;
+        let item_num = r.get("item_num").and_then(|v| v.as_i64()).unwrap_or(1) as u32;
+        let reinforce_level = r
+            .get("reinforce_level")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0) as u16;
+        if gid > pbag.max_grid_num {
+            pbag.max_grid_num = gid;
+        }
+        pbag.grids.insert(
+            gid,
+            bag::BagItem {
+                item_id,
+                item_template_id,
+                item_num,
+                reinforce_level,
+            },
+        );
+    }
+    pbag
+}
 
 /// Dispatch a decoded `BabelTimeSocket` AMF3 request object (`{ method, args, token, callback }`)
 /// and return the framed response bytes ready to send over TCP `:8002` or WebSocket `:8003`.
@@ -82,14 +122,26 @@ pub fn dispatch_client_rpc(
                 return Err("close: missing PlayerSessionActor on user.getUser");
             }
         }
-        ("user", "getVaConfig") => Amf3Value::dense_list([]),
+        ("user", "getVaConfig" | "getArrConfig" | "getSettings") => Amf3Value::dense_list([]),
         ("user", "setVaConfig" | "setMute" | "setVisibleCount" | "showDress") => {
             Amf3Value::String("ok".to_string())
         }
         ("user", "getSwitch" | "getSwitchInfo") | ("switch", "getSwitchInfo") => {
-            Amf3Value::dense_list([])
+            // Return all 63 unlocked `SwitchDef` IDs (`legacy-ref/rpcfw/def/Switch.def.php:18-81`
+            // & `SwitchLogic.class.php:233-253`) so all 63 UI icons in `Main.swf` are enabled.
+            Amf3Value::dense_list((1..=63).map(Amf3Value::Integer))
         }
-        ("bag", "bagInfo") => bag::PlayerBag::new(24).to_amf3(),
+        ("user", "getCanRecruitHeroNum") => Amf3Value::Integer(10),
+        ("user", "isPay") => Amf3Value::Bool(true),
+        ("user", "isGetPayReward") => Amf3Value::Bool(false),
+        ("user", "getSecondPayInfo") => Amf3Value::assoc_map([
+            ("is_pay", Amf3Value::Integer(1)),
+            ("is_get", Amf3Value::Integer(0)),
+        ]),
+        ("bag", "bagInfo") => {
+            let uid = session.uid.unwrap_or(20001) as i64;
+            load_player_bag_from_store(store, uid).to_amf3()
+        }
         ("formation", "getFormation" | "getAllFormation" | "getSquad") => {
             let uid = session.uid.unwrap_or(20001) as i32;
             let master_hid = uid * 100 + 1;
@@ -110,50 +162,184 @@ pub fn dispatch_client_rpc(
             let master_htid = user::master_htid_for_utid(utid);
             let hero_rows = store.select(
                 "t_hero",
-                &["level", "all_exp", "curr_hp"],
-                &[(
-                    "uid",
-                    crate::data::WhereCond::Eq(crate::data::ColumnValue::Int(uid as i64)),
-                )],
-                Some(1),
+                &["hid", "htid", "level", "all_exp", "curr_hp"],
+                &[("uid", WhereCond::Eq(ColumnValue::Int(uid as i64)))],
+                Some(50),
             );
-            let (hlv, hexp, hhp) = hero_rows
-                .first()
-                .map(|r| {
-                    (
-                        r.get("level").and_then(|v| v.as_i64()).unwrap_or(1) as i32,
-                        r.get("all_exp").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
-                        r.get("curr_hp").and_then(|v| v.as_i64()).unwrap_or(1000) as i32,
-                    )
-                })
-                .unwrap_or((1, 0, 1000));
-            Amf3Value::assoc_map([(
-                master_hid.to_string(),
-                Amf3Value::assoc_map([
-                    ("hid", Amf3Value::Integer(master_hid)),
-                    ("htid", Amf3Value::Integer(master_htid)),
-                    ("level", Amf3Value::Integer(hlv)),
-                    ("exp", Amf3Value::Integer(hexp)),
-                    ("all_exp", Amf3Value::Integer(hexp)),
-                    ("curr_hp", Amf3Value::Integer(hhp)),
-                ]),
-            )])
+            if hero_rows.is_empty() {
+                Amf3Value::assoc_map([(
+                    master_hid.to_string(),
+                    Amf3Value::assoc_map([
+                        ("hid", Amf3Value::Integer(master_hid)),
+                        ("htid", Amf3Value::Integer(master_htid)),
+                        ("level", Amf3Value::Integer(1)),
+                        ("exp", Amf3Value::Integer(0)),
+                        ("all_exp", Amf3Value::Integer(0)),
+                        ("curr_hp", Amf3Value::Integer(1000)),
+                    ]),
+                )])
+            } else {
+                let mut entries = Vec::with_capacity(hero_rows.len());
+                for r in hero_rows {
+                    let hid = r.get("hid").and_then(|v| v.as_i64()).unwrap_or(master_hid as i64) as i32;
+                    let htid = r.get("htid").and_then(|v| v.as_i64()).unwrap_or(master_htid as i64) as i32;
+                    let hlv = r.get("level").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+                    let hexp = r.get("all_exp").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                    let hhp = r.get("curr_hp").and_then(|v| v.as_i64()).unwrap_or(1000) as i32;
+                    entries.push((
+                        hid.to_string(),
+                        Amf3Value::assoc_map([
+                            ("hid", Amf3Value::Integer(hid)),
+                            ("htid", Amf3Value::Integer(htid)),
+                            ("level", Amf3Value::Integer(hlv)),
+                            ("exp", Amf3Value::Integer(hexp)),
+                            ("all_exp", Amf3Value::Integer(hexp)),
+                            ("curr_hp", Amf3Value::Integer(hhp)),
+                        ]),
+                    ));
+                }
+                Amf3Value::assoc_map(entries)
+            }
         }
+        ("hero", "getConvertHeroes") => Amf3Value::dense_list([]),
         ("growupplan", "getInfo") => Amf3Value::Integer(-1),
         ("boss", "getBossOffset") => Amf3Value::Integer(0),
         ("charity", "getCharityInfo") => {
             let uid = session.uid.unwrap_or(20001) as i32;
+            let rows = store.select(
+                "t_charity",
+                &["prize_id", "salary_time", "prestige_salary_time"],
+                &[("uid", WhereCond::Eq(ColumnValue::Int(uid as i64)))],
+                Some(1),
+            );
+            let (prize_id, salary_time, prestige_salary_time) = rows
+                .first()
+                .map(|r| {
+                    (
+                        r.get("prize_id").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+                        r.get("salary_time").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+                        r.get("prestige_salary_time")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0) as i32,
+                    )
+                })
+                .unwrap_or((0, 0, 0));
             Amf3Value::assoc_map([
                 ("uid", Amf3Value::Integer(uid)),
-                ("prize_id", Amf3Value::Integer(0)),
-                ("salary_time", Amf3Value::Integer(0)),
-                ("prestige_salary_time", Amf3Value::Integer(0)),
+                ("prize_id", Amf3Value::Integer(prize_id)),
+                ("salary_time", Amf3Value::Integer(salary_time)),
+                ("prestige_salary_time", Amf3Value::Integer(prestige_salary_time)),
                 (
                     "va_charity_info",
                     Amf3Value::assoc_map([("val_ret", Amf3Value::Integer(0))]),
                 ),
             ])
         }
+        ("charity", "fetchVipSalary") => {
+            // `CharityLogic.class.php:95-141`: grant VIP salary, update `salary_time`, return bag diff
+            let uid = session.uid.unwrap_or(20001) as i64;
+            if let Some(actor) = actor_slot.as_mut() {
+                let _ = actor.add_belly(500_000);
+                let _ = actor.add_gold(1_000);
+            }
+            let existing = store.select(
+                "t_charity",
+                &["prestige_salary_time", "prize_id"],
+                &[("uid", WhereCond::Eq(ColumnValue::Int(uid)))],
+                Some(1),
+            );
+            let p_time = existing
+                .first()
+                .and_then(|r| r.get("prestige_salary_time"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let prize_id = existing
+                .first()
+                .and_then(|r| r.get("prize_id"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let mut row = BTreeMap::new();
+            row.insert("uid".to_string(), ColumnValue::Int(uid));
+            row.insert("prize_id".to_string(), ColumnValue::Int(prize_id));
+            row.insert("salary_time".to_string(), ColumnValue::Int(now_i32 as i64));
+            row.insert("prestige_salary_time".to_string(), ColumnValue::Int(p_time));
+            store.insert_or_update("t_charity", "uid", row, false);
+            Amf3Value::dense_list([])
+        }
+        ("charity", "fetchPresigeSalary") => {
+            // `CharityLogic.class.php:314-364`: grant prestige salary Belly, update `prestige_salary_time`, return "ok"
+            let uid = session.uid.unwrap_or(20001) as i64;
+            if let Some(actor) = actor_slot.as_mut() {
+                let _ = actor.add_belly(250_000);
+            }
+            let existing = store.select(
+                "t_charity",
+                &["salary_time", "prize_id"],
+                &[("uid", WhereCond::Eq(ColumnValue::Int(uid)))],
+                Some(1),
+            );
+            let s_time = existing
+                .first()
+                .and_then(|r| r.get("salary_time"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let prize_id = existing
+                .first()
+                .and_then(|r| r.get("prize_id"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let mut row = BTreeMap::new();
+            row.insert("uid".to_string(), ColumnValue::Int(uid));
+            row.insert("prize_id".to_string(), ColumnValue::Int(prize_id));
+            row.insert("salary_time".to_string(), ColumnValue::Int(s_time));
+            row.insert(
+                "prestige_salary_time".to_string(),
+                ColumnValue::Int(now_i32 as i64),
+            );
+            store.insert_or_update("t_charity", "uid", row, false);
+            Amf3Value::String("ok".to_string())
+        }
+        ("charity", "onClicktoFetchSalary") => {
+            let uid = session.uid.unwrap_or(20001) as i64;
+            if let Some(actor) = actor_slot.as_mut() {
+                let _ = actor.add_belly(850_000);
+                let _ = actor.add_gold(1_000);
+            }
+            let mut row = BTreeMap::new();
+            row.insert("uid".to_string(), ColumnValue::Int(uid));
+            row.insert("prize_id".to_string(), ColumnValue::Int(0));
+            row.insert("salary_time".to_string(), ColumnValue::Int(now_i32 as i64));
+            row.insert(
+                "prestige_salary_time".to_string(),
+                ColumnValue::Int(now_i32 as i64),
+            );
+            store.insert_or_update("t_charity", "uid", row, false);
+            Amf3Value::assoc_map([
+                ("PresigeSalary", Amf3Value::String("ok".to_string())),
+                (
+                    "bountySalary",
+                    Amf3Value::assoc_map([
+                        ("ret", Amf3Value::String("ok".to_string())),
+                        ("belly", Amf3Value::Integer(100_000)),
+                    ]),
+                ),
+                ("VipSalary", Amf3Value::dense_list([])),
+            ])
+        }
+        ("achievements", "getAchievementPoints") => Amf3Value::Integer(1500),
+        ("achievements", "fetchSalary") => {
+            if let Some(actor) = actor_slot.as_mut() {
+                let _ = actor.add_belly(100_000);
+            }
+            Amf3Value::assoc_map([
+                ("ret", Amf3Value::String("ok".to_string())),
+                ("belly", Amf3Value::Integer(100_000)),
+            ])
+        }
+        (
+            "achievements",
+            "getKeepOnlineAchievements" | "getLastOnlineAchievements" | "getNameList",
+        ) => Amf3Value::dense_list([]),
         ("elves", "get") => {
             let uid = session.uid.unwrap_or(20001) as i32;
             Amf3Value::assoc_map([
@@ -218,7 +404,8 @@ pub fn dispatch_client_rpc(
         }
         ("bag", "openGrid") => {
             let slots = args.first().and_then(|v| v.as_i64()).unwrap_or(1) as u16;
-            let mut pbag = bag::PlayerBag::new(24);
+            let uid = session.uid.unwrap_or(20001) as i64;
+            let mut pbag = load_player_bag_from_store(store, uid);
             if let Some(actor) = actor_slot.as_mut() {
                 if pbag.open_grid_by_gold(actor, slots, 10) {
                     pbag.to_amf3()
@@ -232,8 +419,27 @@ pub fn dispatch_client_rpc(
         ("bag", "receiveItem" | "addItems") => {
             let tmpl_id = args.first().and_then(|v| v.as_i64()).unwrap_or(10001) as u32;
             let count = args.get(1).and_then(|v| v.as_i64()).unwrap_or(1) as u32;
-            let mut pbag = bag::PlayerBag::new(24);
-            let _ = pbag.add_item(store, tmpl_id, count);
+            let uid = session.uid.unwrap_or(20001) as i64;
+            let mut pbag = load_player_bag_from_store(store, uid);
+            if let Ok(gid) = pbag.add_item(store, tmpl_id, count) {
+                if let Some(it) = pbag.grids.get(&gid) {
+                    let mut bag_row = BTreeMap::new();
+                    bag_row.insert("bag_key".to_string(), ColumnValue::Int(uid * 1000 + gid as i64));
+                    bag_row.insert("uid".to_string(), ColumnValue::Int(uid));
+                    bag_row.insert("gid".to_string(), ColumnValue::Int(gid as i64));
+                    bag_row.insert("item_id".to_string(), ColumnValue::Int(it.item_id as i64));
+                    bag_row.insert(
+                        "item_template_id".to_string(),
+                        ColumnValue::Int(it.item_template_id as i64),
+                    );
+                    bag_row.insert("item_num".to_string(), ColumnValue::Int(it.item_num as i64));
+                    bag_row.insert(
+                        "reinforce_level".to_string(),
+                        ColumnValue::Int(it.reinforce_level as i64),
+                    );
+                    store.insert_or_update("t_bag", "bag_key", bag_row, false);
+                }
+            }
             pbag.to_amf3()
         }
         ("forge", "reinforce") => {
@@ -431,11 +637,83 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        ("reward", "getSignInfo") => Amf3Value::assoc_map([
+            ("sign_time", Amf3Value::Integer(now_i32)),
+            ("step", Amf3Value::Integer(1)),
+            ("upgrade_times", Amf3Value::Integer(0)),
+            ("va_sign_info", Amf3Value::dense_list([])),
+        ]),
+        ("reward", "getGiftInfo") => Amf3Value::dense_list([]),
+        ("reward", "getRewardGoldInfo") => Amf3Value::assoc_map([
+            ("gold_num", Amf3Value::Integer(1_000_000)),
+            ("va_reward", Amf3Value::dense_list([])),
+        ]),
+        ("turntable", "getInfo") => Amf3Value::assoc_map([
+            ("times", Amf3Value::Integer(3)),
+            ("MaxTimes", Amf3Value::Integer(3)),
+            ("item", Amf3Value::Integer(0)),
+        ]),
+        ("turntable", "getBellyPond") => Amf3Value::Integer(1_000_000),
+        ("digactivity", "getInfo") => Amf3Value::assoc_map([
+            ("free_times", Amf3Value::Integer(3)),
+            ("drop_num", Amf3Value::Integer(0)),
+            ("va_dig", Amf3Value::dense_list([])),
+        ]),
+        ("taskfight", "getInfo") => Amf3Value::assoc_map([
+            ("point", Amf3Value::Integer(100)),
+            ("prized", Amf3Value::dense_list([])),
+            ("va_active", Amf3Value::dense_list([])),
+        ]),
+        ("depositPlan", "getDepositPlanInfo") => Amf3Value::dense_list([]),
+        ("weekcard", "getInfo") => Amf3Value::assoc_map([
+            ("buy_time", Amf3Value::Integer(0)),
+            ("reward_time", Amf3Value::Integer(0)),
+        ]),
+        ("festival", "getFeedbackUserInfo") => Amf3Value::assoc_map([
+            ("point", Amf3Value::Integer(0)),
+            ("va_info", Amf3Value::dense_list([])),
+        ]),
+        ("payback", "getCurAvailablePayBackIds") => Amf3Value::dense_list([]),
+        ("mergeserver", "getIsCompensation" | "getMergerServerTimes") => Amf3Value::Integer(0),
+        ("mergeserver", "getCompensation") => Amf3Value::String("ok".to_string()),
+        ("retrieve", "getInfo") => Amf3Value::dense_list([]),
+        ("dress", "getDressRommInfo") => Amf3Value::assoc_map([
+            ("cur_dress", Amf3Value::Integer(0)),
+            ("arr_dress", Amf3Value::dense_list([])),
+        ]),
+        ("copet", "getUserPetInfo") => Amf3Value::assoc_map([
+            ("cur_pet", Amf3Value::Integer(0)),
+            ("arr_pet", Amf3Value::dense_list([])),
+        ]),
+        ("copet", "getUserPetCollectionInfo") => Amf3Value::dense_list([]),
+        ("port", "selfResourceInfo") => Amf3Value::dense_list([]),
+        ("sciTech", "getCdEndTime") => Amf3Value::assoc_map([
+            ("cd_time", Amf3Value::Integer(0)),
+            ("is_busy", Amf3Value::Integer(0)),
+        ]),
+        ("guildskill", "getAllGuildTechLv") => Amf3Value::dense_list([]),
+        ("propertylock", "getStatus") => Amf3Value::Integer(0),
+        ("worldwar", "getUserWorldWarInfo") => Amf3Value::assoc_map([
+            ("cheer_uid", Amf3Value::Integer(0)),
+            ("worship_time", Amf3Value::Integer(0)),
+        ]),
+        ("worldpeak", "getUserPeakInfo") => {
+            Amf3Value::assoc_map([("point", Amf3Value::Integer(0))])
+        }
+        ("arena", "hasReward") => Amf3Value::Bool(false),
+        ("arena", "getDefeatedNotice") => Amf3Value::dense_list([]),
+        ("gm", "getInfoBeforeExit") => Amf3Value::dense_list([]),
         _ => Amf3Value::dense_list([]),
     };
 
+    let mut user_modify = None;
     if let Some(actor) = actor_slot.as_mut() {
         if let Some(delta) = actor.take_dirty_delta() {
+            let mut modify_entries = Vec::with_capacity(delta.updated_columns.len());
+            for (k, v) in &delta.updated_columns {
+                modify_entries.push((k.to_string(), Amf3Value::Integer((*v) as i32)));
+            }
+            user_modify = Some(Amf3Value::assoc_map(modify_entries));
             store.apply_write_behind_delta(&delta);
             if let Some(p) = persist_path {
                 let _ = store.save_to_disk(p);
@@ -443,7 +721,13 @@ pub fn dispatch_client_rpc(
         }
     }
 
-    Ok(encode_babeltime_response(req_val, "ok", ret_val, now_i32))
+    Ok(encode_babeltime_response_with_modify(
+        req_val,
+        "ok",
+        ret_val,
+        user_modify,
+        now_i32,
+    ))
 }
 
 #[cfg(test)]
@@ -732,5 +1016,85 @@ mod tests {
         .expect("dispatch user.getUser failed");
         let (_, dec_get_user) = decode_framed_packet(&pkt_get_user).unwrap();
         assert_eq!(dec_get_user.get_field("err").and_then(|v| v.as_str()), Some("ok"));
+
+        // 6. Verify `user.getSwitch` returns all 63 SwitchDef feature IDs (`Switch.def.php:18-81`)
+        let req_switch = Amf3Value::assoc_map([
+            ("method", Amf3Value::String("user.getSwitch".to_string())),
+            ("args", Amf3Value::dense_list([])),
+            ("token", Amf3Value::String("7".to_string())),
+            (
+                "callback",
+                Amf3Value::assoc_map([(
+                    "callbackName",
+                    Amf3Value::String("re.user.getSwitch".to_string()),
+                )]),
+            ),
+        ]);
+        let pkt_switch = dispatch_client_rpc(
+            &mut session,
+            &mut actor_slot,
+            &store,
+            None,
+            &req_switch,
+            1700000006,
+        )
+        .expect("dispatch user.getSwitch failed");
+        let (_, dec_switch) = decode_framed_packet(&pkt_switch).unwrap();
+        let ret_list = match dec_switch.get_field("ret").unwrap() {
+            Amf3Value::Array { dense, .. } => dense,
+            _ => panic!("expected dense array"),
+        };
+        let inner_switch = &ret_list[0];
+        let switch_arr = match inner_switch.get_field("ret").unwrap() {
+            Amf3Value::Array { dense, .. } => dense,
+            _ => panic!("expected dense switch array"),
+        };
+        assert_eq!(switch_arr.len(), 63, "user.getSwitch must return all 63 SwitchDef IDs");
+
+        // 7. Verify `charity.fetchPresigeSalary` returns "ok" AND appends `babeltime.player.userModify` push callback (`RPCFramework.class.php:348-391`)
+        let req_prestige_sal = Amf3Value::assoc_map([
+            (
+                "method",
+                Amf3Value::String("charity.fetchPresigeSalary".to_string()),
+            ),
+            ("args", Amf3Value::dense_list([])),
+            ("token", Amf3Value::String("8".to_string())),
+            (
+                "callback",
+                Amf3Value::assoc_map([(
+                    "callbackName",
+                    Amf3Value::String("charity.fetchPresigeSalary".to_string()),
+                )]),
+            ),
+        ]);
+        let pkt_sal = dispatch_client_rpc(
+            &mut session,
+            &mut actor_slot,
+            &store,
+            None,
+            &req_prestige_sal,
+            1700000007,
+        )
+        .expect("dispatch charity.fetchPresigeSalary failed");
+        let (_, dec_sal) = decode_framed_packet(&pkt_sal).unwrap();
+        let sal_ret_list = match dec_sal.get_field("ret").unwrap() {
+            Amf3Value::Array { dense, .. } => dense,
+            _ => panic!("expected dense ret list"),
+        };
+        assert_eq!(
+            sal_ret_list.len(),
+            2,
+            "Response with dirty actor delta must contain 2 inner AMF3 payloads (babeltime.player.userModify + RPC result)"
+        );
+        let inner_mod = &sal_ret_list[0];
+        assert_eq!(
+            inner_mod
+                .get_field("callback")
+                .and_then(|c| c.get_field("callbackName"))
+                .and_then(|v| v.as_str()),
+            Some("babeltime.player.userModify")
+        );
+        let inner_sal = &sal_ret_list[1];
+        assert_eq!(inner_sal.get_field("ret").and_then(|v| v.as_str()), Some("ok"));
     }
 }

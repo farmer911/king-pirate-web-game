@@ -182,6 +182,18 @@ pub fn encode_babeltime_response(
     ret_val: Amf3Value,
     now_unix: i32,
 ) -> Vec<u8> {
+    encode_babeltime_response_with_modify(req_val, err, ret_val, None, now_unix)
+}
+
+/// Encode a `BabelTimeSocket` response with an optional `babeltime.player.userModify` push callback
+/// (`RPCFramework.class.php:348-391` & `OtherUserObj.class.php:526-562`).
+pub fn encode_babeltime_response_with_modify(
+    req_val: &Amf3Value,
+    err: &str,
+    ret_val: Amf3Value,
+    user_modify: Option<Amf3Value>,
+    now_unix: i32,
+) -> Vec<u8> {
     let token = req_val
         .get_field("token")
         .and_then(|v| v.as_str().map(|s| s.to_string()).or_else(|| v.as_i64().map(|n| n.to_string())))
@@ -197,11 +209,27 @@ pub fn encode_babeltime_response(
         ("callback", callback),
         ("ret", ret_val),
     ]);
+    let mut ret_items = Vec::with_capacity(2);
+    if let Some(mod_map) = user_modify {
+        let modify_cb = Amf3Value::assoc_map([
+            ("err", Amf3Value::String("ok".to_string())),
+            (
+                "callback",
+                Amf3Value::assoc_map([(
+                    "callbackName",
+                    Amf3Value::String("babeltime.player.userModify".to_string()),
+                )]),
+            ),
+            ("ret", Amf3Value::dense_list([mod_map])),
+        ]);
+        ret_items.push(modify_cb);
+    }
+    ret_items.push(inner);
     let outer = Amf3Value::assoc_map([
         ("err", Amf3Value::String("ok".to_string())),
         ("time", Amf3Value::Integer(now_unix)),
         ("token", Amf3Value::String(token)),
-        ("ret", Amf3Value::dense_list([inner])),
+        ("ret", Amf3Value::dense_list(ret_items)),
     ]);
     encode_framed_packet(&outer, crate::protocol::FLAG_UNWRAP_RET)
 }

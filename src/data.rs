@@ -36,6 +36,13 @@ impl ColumnValue {
             _ => None,
         }
     }
+
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::Text(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
 }
 
 /// Update operator matching `BaseOperator`, `IncOperator`, `DecOperator` (`NewData.class.php:18-48`).

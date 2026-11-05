@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 export interface CharacterSummary {
   uid: number;
@@ -28,6 +28,7 @@ type ModalType =
   | "dh_exchange"
   | "level_tool"
   | "fix_tool"
+  | "gm_tool"
   | "tg_promo"
   | "service_info";
 
@@ -35,6 +36,91 @@ function encodeForm(data: Record<string, string>): string {
   return Object.entries(data)
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join("&");
+}
+
+function RuffleGameCanvas({ sid }: { sid: number }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    container.innerHTML = "";
+
+    const mountRuffle = () => {
+      const ruffleGlobal = (window as unknown as {
+        RufflePlayer?: {
+          newest?: () => {
+            createPlayer: () => HTMLElement & {
+              load: (opts: Record<string, unknown>) => Promise<void>;
+            };
+          };
+        };
+      }).RufflePlayer;
+
+      if (!ruffleGlobal || typeof ruffleGlobal.newest !== "function") {
+        return false;
+      }
+      const ruffle = ruffleGlobal.newest();
+      if (!ruffle) return false;
+      const player = ruffle.createPlayer();
+      player.id = "Main_Game";
+      player.style.width = "1260px";
+      player.style.height = "660px";
+      player.style.margin = "0 auto";
+      player.style.display = "block";
+      container.appendChild(player);
+
+      const originUrl = window.location.origin;
+      const hostName = window.location.hostname;
+      player.load({
+        url: originUrl + "/T9NuoYa/loading.swf",
+        base: originUrl + "/T9NuoYa/",
+        allowScriptAccess: true,
+        quality: "high",
+        backgroundColor: "#000000",
+        wmode: "direct",
+        parameters: {
+          host: hostName,
+          assetPath: originUrl + "/T9NuoYa/assets/",
+          port: 8002,
+          AMF: 3,
+          serverID: "game20002",
+          openDateTime: "2015-10-18-00-00-00",
+          mergeServerTime: "2015-10-18-15-00-00",
+          swfURL: originUrl + "/T9NuoYa/Main.swf",
+          configURL: originUrl + "/T9NuoYa/loadingTips.xml",
+          pid: String(sid),
+        },
+      });
+      return true;
+    };
+
+    if (!mountRuffle()) {
+      const timer = window.setInterval(() => {
+        if (mountRuffle()) {
+          window.clearInterval(timer);
+        }
+      }, 150);
+      return () => window.clearInterval(timer);
+    }
+  }, [sid]);
+
+  return (
+    <div
+      id="ruffle-game-container"
+      ref={containerRef}
+      style={{
+        flex: 1,
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#000 url('/T9NuoYa/main.jpg') no-repeat center center / cover",
+        overflow: "hidden",
+      }}
+    />
+  );
 }
 
 export function App() {
@@ -74,6 +160,12 @@ export function App() {
   const [bloodUname, setBloodUname] = useState<string>("");
   const [logoutConfirmBlood, setLogoutConfirmBlood] = useState<boolean>(false);
 
+  // GM Console states (matching Console.class.php & /admin_loulxgame)
+  const [gmUname, setGmUname] = useState<string>("");
+  const [gmCmd, setGmCmd] = useState<string>("addItem");
+  const [gmVal1, setGmVal1] = useState<string>("101101");
+  const [gmVal2, setGmVal2] = useState<string>("1");
+
   const showToast = (text: string, ok = true) => {
     setToast({ text, ok });
     setTimeout(() => {
@@ -95,6 +187,7 @@ export function App() {
           setLevelUname((prev) => prev || firstChar);
           setHeroUname((prev) => prev || firstChar);
           setBloodUname((prev) => prev || firstChar);
+          setGmUname((prev) => prev || firstChar);
           setSelectedRid(String(data.characters[0].uid));
         }
         return data;
@@ -112,40 +205,43 @@ export function App() {
     fetchSession().then((data) => {
       const path = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
-      if (path === "/app/Game/game.php") {
-        setPlayingServerFq(params.get("FQ") || "1");
-      } else if (path === "/app/Game/index.php") {
+      const view = params.get("view");
+      if (view === "game" || path.startsWith("/app/Game/game")) {
+        setPlayingServerFq(params.get("FQ") || params.get("server") || "1");
+      } else if (view === "game_select" || path.startsWith("/app/Game/index")) {
         setModal("game_select");
-      } else if (path === "/app/dh/index.php") {
+      } else if (view === "dh" || path.startsWith("/app/dh/index")) {
         setModal("dh_exchange");
-      } else if (path === "/app/sys/login.php") {
+      } else if (view === "login" || path.startsWith("/app/sys/login")) {
         setModal("login");
-      } else if (path === "/app/sys/reg.php") {
+      } else if (view === "reg" || path.startsWith("/app/sys/reg")) {
         setModal("reg");
-      } else if (path === "/app/sys/editpass.php") {
+      } else if (view === "editpass" || path.startsWith("/app/sys/editpass")) {
         setModal("editpass");
-      } else if (path === "/app/sys/findpass.php") {
+      } else if (view === "findpass" || path.startsWith("/app/sys/findpass")) {
         setModal("findpass");
-      } else if (path === "/level.php") {
+      } else if (view === "level" || path.startsWith("/level")) {
         setModal("level_tool");
-      } else if (path === "/fix.php") {
+      } else if (view === "fix" || path.startsWith("/fix")) {
         setModal("fix_tool");
-      } else if (path === "/member.php" && data && !data.loggedIn) {
-        window.history.replaceState({}, "", "/index.php");
-      } else if ((path === "/" || path === "/index.php") && data && data.loggedIn) {
-        window.history.replaceState({}, "", "/member.php");
+      } else if (view === "gm" || path.startsWith("/admin_loulxgame")) {
+        setModal("gm_tool");
+      } else if (view === "member" && data && !data.loggedIn) {
+        window.history.replaceState({}, "", "/");
+      } else if (path === "/" && data && data.loggedIn && !view) {
+        window.history.replaceState({}, "", "/?view=member");
       }
     });
   }, []);
 
-  // Handlers for core/Cx_Ajax.php?type={login,reg,editpass,findpass,SignOut}
+  // Handlers for REST JSON Auth API (/api/auth/{login,register,recover,password,logout})
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (uname.trim().length < 4 || upass.trim().length < 4) {
       showToast("Tài khoản và mật khẩu phải có ít nhất 4 ký tự!", false);
       return;
     }
-    const res = await fetch("/core/Cx_Ajax.php?Action=Login", {
+    const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: encodeForm({ Uname: uname.trim(), Upass: upass.trim() }),
@@ -156,7 +252,7 @@ export function App() {
       showToast(data.info, true);
       setModal(null);
       await fetchSession();
-      window.history.pushState({}, "", "/member.php");
+      window.history.pushState({}, "", "/?view=member");
     } else {
       showToast(data.info || "Đăng nhập không thành công!", false);
     }
@@ -168,7 +264,7 @@ export function App() {
       showToast("Tài khoản, mật khẩu và mã bảo mật phải từ 4 ký tự trở lên!", false);
       return;
     }
-    const res = await fetch("/core/Cx_Ajax.php?Action=Register", {
+    const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: encodeForm({
@@ -183,7 +279,7 @@ export function App() {
       showToast(data.info, true);
       setModal(null);
       await fetchSession();
-      window.history.pushState({}, "", "/member.php");
+      window.history.pushState({}, "", "/?view=member");
     } else {
       showToast(data.info || "Đăng ký không thành công!", false);
     }
@@ -191,7 +287,7 @@ export function App() {
 
   const handleFindPass = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch("/core/Cx_Ajax.php?Action=FindPass", {
+    const res = await fetch("/api/auth/recover", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: encodeForm({
@@ -212,7 +308,7 @@ export function App() {
 
   const handleEditPass = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch("/core/Cx_Ajax.php?Action=EditPass", {
+    const res = await fetch("/api/auth/password", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: encodeForm({
@@ -227,14 +323,14 @@ export function App() {
       showToast(data.info, true);
       setModal(null);
       await fetchSession();
-      window.history.pushState({}, "", "/index.php");
+      window.history.pushState({}, "", "/");
     } else {
       showToast(data.info, false);
     }
   };
 
   const handleSignOut = async () => {
-    const res = await fetch("/core/Cx_Ajax.php?Action=SignOut", {
+    const res = await fetch("/api/auth/logout", {
       method: "POST",
       credentials: "same-origin",
     });
@@ -243,13 +339,13 @@ export function App() {
     setPlayingServerFq(null);
     setModal(null);
     await fetchSession();
-    window.history.pushState({}, "", "/index.php");
+    window.history.pushState({}, "", "/");
   };
 
-  // Handler for selecting server in Gold Exchange (app/dh/ajax.php?type=Get_GameUser)
+  // Handler for selecting server in Gold Exchange (/api/exchange/characters)
   const handleSelectExchangeServer = async (fq: string) => {
     setSelectedFq(fq);
-    const res = await fetch("/app/dh/ajax.php?Action=Get_GameUser", {
+    const res = await fetch("/api/exchange/characters", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: encodeForm({ FQ: fq }),
@@ -264,14 +360,14 @@ export function App() {
     }
   };
 
-  // Handler for Gold Exchange submission (app/dh/ajax.php?Action=DHYB)
+  // Handler for Gold Exchange submission (/api/exchange/gold)
   const handleExchangeGold = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFq) {
       showToast("Vui lòng chọn máy chủ!", false);
       return;
     }
-    const res = await fetch("/app/dh/ajax.php?Action=DHYB", {
+    const res = await fetch("/api/exchange/gold", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: encodeForm({
@@ -287,6 +383,26 @@ export function App() {
       await fetchSession();
     } else {
       showToast(data.info || "Đổi vàng thất bại!", false);
+    }
+  };
+
+  const handleGmExecute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await fetch("/api/gm/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: encodeForm({
+        uname: gmUname.trim(),
+        cmd: gmCmd,
+        val1: gmVal1.trim(),
+        val2: gmVal2.trim(),
+      }),
+      credentials: "same-origin",
+    });
+    const data = await res.json();
+    showToast(data.info, data.status === "y");
+    if (data.status === "y") {
+      await fetchSession();
     }
   };
 
@@ -368,7 +484,7 @@ export function App() {
         </div>
       )}
 
-      {/* Option B: Persistent Ruffle Game Canvas + Floating SPA HUD Overlay (/app/Game/game.php?FQ=1) */}
+      {/* Option B: Persistent Ruffle Game Canvas + Floating SPA HUD Overlay (/?view=game&server=1) */}
       {playingServerFq && (
         <div
           id="spa-game-shell"
@@ -446,6 +562,16 @@ export function App() {
                 Cập nhật Level
               </button>
               <button
+                id="btn-hud-gm"
+                className="button button-little bg-main"
+                onClick={() => {
+                  fetchSession();
+                  setModal("gm_tool");
+                }}
+              >
+                GM Tool (Admin LouLx)
+              </button>
+              <button
                 id="btn-hud-fix"
                 className="button button-little bg-sub"
                 onClick={() => {
@@ -461,7 +587,7 @@ export function App() {
                 onClick={() => {
                   setPlayingServerFq(null);
                   setSpaPortalDrawerOpen(false);
-                  window.history.pushState({}, "", "/member.php");
+                  window.history.pushState({}, "", "/?view=member");
                   fetchSession();
                 }}
               >
@@ -470,14 +596,7 @@ export function App() {
             </div>
           </div>
 
-          <iframe
-            id="Main_Game"
-            name="mainFrame"
-            title="VUA HẢI TẶC 2023 LouLx Game"
-            src={`/T9NuoYa/T9NuoYa.html?sid=${sid}`}
-            style={{ flex: 1, width: "100%", border: "none" }}
-            allowFullScreen
-          />
+          <RuffleGameCanvas sid={sid} />
         </div>
       )}
 
@@ -859,7 +978,7 @@ export function App() {
                     <div className="text-left">
                       <strong className="text-big text-main">Cập nhật Level nhân vật</strong>
                       <br />
-                      <span className="text-small">Tùy chỉnh Level 1 - 200 (level.php)</span>
+                      <span className="text-small">Tùy chỉnh Level 1 - 200</span>
                     </div>
                   </div>
                   <div className="member-card" onClick={() => setModal("fix_tool")}>
@@ -873,7 +992,21 @@ export function App() {
                     <div className="text-left">
                       <strong className="text-big text-main">Sửa giá trị tài khoản</strong>
                       <br />
-                      <span className="text-small">Sửa lỗi Lv.200 &amp; Sinh mệnh PB (fix.php)</span>
+                      <span className="text-small">Sửa lỗi Lv.200 &amp; Sinh mệnh PB</span>
+                    </div>
+                  </div>
+                  <div id="card-gm-tool" className="member-card" onClick={() => setModal("gm_tool")}>
+                    <img
+                      src="/WebRes/img/gcds-dragon-512.png"
+                      className="margin-right radius-circle border"
+                      height={60}
+                      width={60}
+                      alt="GM Tool"
+                    />
+                    <div className="text-left">
+                      <strong className="text-big text-main">GM Tool (Admin LouLx)</strong>
+                      <br />
+                      <span className="text-small">Thêm Vũ Khí GM, Tướng, Vàng, Beri</span>
                     </div>
                   </div>
                 </div>
@@ -1191,7 +1324,7 @@ export function App() {
                     onClick={() => {
                       setModal(null);
                       setPlayingServerFq("1");
-                      window.history.pushState({}, "", "/app/Game/game.php?FQ=1");
+                      window.history.pushState({}, "", "/?view=game&server=1");
                     }}
                     className="button button-block bg-main text-big"
                     style={{ padding: "16px 20px" }}
@@ -1408,7 +1541,7 @@ export function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="layer-header">
-              <span>Sửa giá trị tài khoản (fix.php)</span>
+              <span>Sửa giá trị tài khoản</span>
               <button className="layer-close" onClick={() => setModal(null)}>
                 ×
               </button>
@@ -1490,7 +1623,103 @@ export function App() {
         </div>
       )}
 
-      {/* 9. Promo / Service Info Modals */}
+      {/* 9. LouLx GM Console Modal (/admin_loulxgame & Console.class.php) */}
+      {modal === "gm_tool" && (
+        <div className="layer-backdrop" style={{ zIndex: 12000 }} onClick={() => setModal(null)}>
+          <div
+            className="layer-modal"
+            style={{ width: "540px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="layer-header">
+              <span>GM Tool — Admin LouLx (Vũ Khí GM, Vàng, Beri, Tướng)</span>
+              <button className="layer-close" onClick={() => setModal(null)}>
+                ×
+              </button>
+            </div>
+            <div className="layer-body">
+              <form id="GmConsoleForm" onSubmit={handleGmExecute}>
+                <div className="form-group">
+                  <div className="label">Tên nhân vật</div>
+                  <input
+                    type="text"
+                    id="gm-uname"
+                    className="input"
+                    placeholder="Nhập tên nhân vật"
+                    value={gmUname}
+                    onChange={(e) => setGmUname(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <div className="label">Chức năng GM</div>
+                  <select
+                    id="gm-cmd"
+                    className="input"
+                    value={gmCmd}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setGmCmd(next);
+                      if (next === "addItem") setGmVal1("101101");
+                      else if (next === "gold" || next === "belly") setGmVal1("100000000");
+                      else if (next === "vip") setGmVal1("12");
+                      else if (next === "execution") setGmVal1("100000");
+                      else if (next === "prestige" || next === "experience") setGmVal1("10000000");
+                      else if (next === "hero") setGmVal1("10001");
+                    }}
+                  >
+                    <option value="addItem">Thêm Vũ Khí GM / Vật Phẩm vào Túi đồ (addItem)</option>
+                    <option value="gold">Chỉnh Vàng (gold_num)</option>
+                    <option value="belly">Chỉnh Beri (belly_num)</option>
+                    <option value="vip">Chỉnh Cấp VIP (0 - 12)</option>
+                    <option value="execution">Chỉnh Thể Lực (cur_execution)</option>
+                    <option value="prestige">Chỉnh Danh Vọng (prestige_num)</option>
+                    <option value="experience">Chỉnh Chiến Tích (experience_num)</option>
+                    <option value="hero">Chiêu mộ Tướng theo HTID (hero)</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <div className="label">
+                    {gmCmd === "addItem"
+                      ? "ID Vật Phẩm / Vũ Khí GM (VD: 101101=Vũ Khí GM, 102101=Giáp GM, 60001=Trái Ác Quỷ)"
+                      : gmCmd === "hero"
+                        ? "HTID Tướng (VD: 10001, 10002, 10101)"
+                        : "Giá trị cần thiết lập"}
+                  </div>
+                  <input
+                    type="number"
+                    id="gm-val1"
+                    className="input"
+                    value={gmVal1}
+                    onChange={(e) => setGmVal1(e.target.value)}
+                    required
+                  />
+                </div>
+                {(gmCmd === "addItem" || gmCmd === "hero") && (
+                  <div className="form-group">
+                    <div className="label">
+                      {gmCmd === "addItem" ? "Số lượng" : "Cấp độ Tướng (1 - 200)"}
+                    </div>
+                    <input
+                      type="number"
+                      id="gm-val2"
+                      className="input"
+                      value={gmVal2}
+                      onChange={(e) => setGmVal2(e.target.value)}
+                      required
+                    />
+                  </div>
+                )}
+                <button type="submit" id="btn-submit-gm" className="button bg-main button-block">
+                  Thực thi lệnh GM
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Promo / Service Info Modals */}
       {modal === "tg_promo" && (
         <div className="layer-backdrop" onClick={() => setModal(null)}>
           <div className="layer-modal" style={{ width: "440px" }} onClick={(e) => e.stopPropagation()}>

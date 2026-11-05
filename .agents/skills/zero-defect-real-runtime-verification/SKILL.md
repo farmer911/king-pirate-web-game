@@ -11,7 +11,7 @@ Code must compile with **zero errors and zero warnings**, have **100% of domain 
 
 **Core principle:** Violating the letter of these rules is violating the spirit of these rules.
 
-**REQUIRED SUB-SKILL:** Use `honesty`, `test-driven-development`, `verification-before-completion`, and `empirical-metrics-and-knowledge-tools`.
+**REQUIRED SUB-SKILL:** Use `playwright-e2e-evidence`, `honesty`, `test-driven-development`, `verification-before-completion`, and `empirical-metrics-and-knowledge-tools`.
 
 ## The Iron Laws
 

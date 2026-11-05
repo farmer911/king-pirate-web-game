@@ -11,7 +11,7 @@ Never deceive the user with unmeasured metrics, phantom crates not in `Cargo.tom
 
 **Core principle:** Violating the letter of these rules is violating the spirit of these rules.
 
-**REQUIRED SUB-SKILL:** Use `simplify`, `empirical-metrics-and-knowledge-tools`, `engineering-audit-gate`, and `verification-before-completion`.
+**REQUIRED SUB-SKILL:** Use `playwright-e2e-evidence`, `simplify`, `empirical-metrics-and-knowledge-tools`, `engineering-audit-gate`, and `verification-before-completion`.
 
 ## The 5 Iron Laws of Honesty
 

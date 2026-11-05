@@ -177,7 +177,7 @@ pub fn find_account_by_name(store: &DataStore, name: &str) -> Option<RowMap> {
     rows.into_iter().next()
 }
 
-/// Embedded React.js Portal Entry HTML (`client-assets/portal/index.html`).
+/// Embedded React.js Portal Entry HTML (`client-assets/portal/index.html`) with Ruffle WebAssembly configured directly.
 const REACT_PORTAL_SHELL_HTML: &str = r#"<!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -188,6 +188,24 @@ const REACT_PORTAL_SHELL_HTML: &str = r#"<!DOCTYPE html>
   <meta http-equiv="Expires" content="0" />
   <title>VUA HAI TAC - LOULX GAME</title>
   <link rel="stylesheet" href="/portal/legacy.css" />
+  <script type="text/javascript">
+    window.RufflePlayer = window.RufflePlayer || {};
+    window.RufflePlayer.config = {
+      publicPath: "/T9NuoYa/ruffle/",
+      autoplay: "on",
+      unmuteOverlay: "hidden",
+      preloader: false,
+      warnOnUnsupportedContent: false,
+      allowScriptAccess: true,
+      letterbox: "on",
+      socketProxy: [
+        { host: window.location.hostname, port: 8002, proxyUrl: "ws://" + window.location.hostname + ":8003" },
+        { host: "192.168.1.234", port: 8002, proxyUrl: "ws://" + window.location.hostname + ":8003" },
+        { host: "127.0.0.1", port: 8002, proxyUrl: "ws://" + window.location.hostname + ":8003" }
+      ]
+    };
+  </script>
+  <script type="text/javascript" src="/T9NuoYa/ruffle/ruffle.js"></script>
 </head>
 <body class="body_2">
   <div id="root"></div>
@@ -232,8 +250,60 @@ pub fn try_handle_portal_route(
 
     match clean_path {
         "/api/session" => Some(handle_api_session(session_user.as_deref(), store)),
+        "/api/auth/login" => Some(handle_cx_ajax(
+            "Login",
+            &form,
+            session_user.as_deref(),
+            store,
+            persist_path,
+        )),
+        "/api/auth/register" => Some(handle_cx_ajax(
+            "Register",
+            &form,
+            session_user.as_deref(),
+            store,
+            persist_path,
+        )),
+        "/api/auth/logout" => Some(handle_cx_ajax(
+            "SignOut",
+            &form,
+            session_user.as_deref(),
+            store,
+            persist_path,
+        )),
+        "/api/auth/password" => Some(handle_cx_ajax(
+            "EditPass",
+            &form,
+            session_user.as_deref(),
+            store,
+            persist_path,
+        )),
+        "/api/auth/recover" => Some(handle_cx_ajax(
+            "FindPass",
+            &form,
+            session_user.as_deref(),
+            store,
+            persist_path,
+        )),
+        "/api/exchange/characters" => Some(handle_dh_ajax(
+            "Get_GameUser",
+            &form,
+            session_user.as_deref(),
+            store,
+            persist_path,
+        )),
+        "/api/exchange/gold" => Some(handle_dh_ajax(
+            "DHYB",
+            &form,
+            session_user.as_deref(),
+            store,
+            persist_path,
+        )),
         "/api/level" => Some(handle_level_api(&form, store, persist_path)),
         "/api/fix" => Some(handle_fix_api(&form, store, persist_path)),
+        "/api/gm/info" => Some(handle_gm_info(store)),
+        "/api/gm/execute" => Some(handle_gm_execute(&form, store, persist_path)),
+        "/admin_loulxgame" | "/admin_loulxgame/" => Some(portal_react_shell(true, "gm_tool")),
         "/core/Cx_Ajax.php" => {
             let action = query
                 .get("Action")
@@ -851,6 +921,222 @@ pub fn handle_fix_api(
             vec![],
         )
     }
+}
+
+/// Handle `GET /api/gm/info` (`[5] GM.bat -> /admin_loulxgame` & `Console.class.php:18-2098`).
+pub fn handle_gm_info(store: &DataStore) -> PortalHttpResponse {
+    let users = store.select(
+        "t_user",
+        &[
+            "uid",
+            "uname",
+            "level",
+            "vip",
+            "gold_num",
+            "belly_num",
+            "cur_execution",
+            "prestige_num",
+            "experience_num",
+        ],
+        &[],
+        Some(50),
+    );
+    let mut chars_json = String::from("[");
+    for (idx, u) in users.iter().enumerate() {
+        if idx > 0 {
+            chars_json.push(',');
+        }
+        let uid = u.get("uid").and_then(|v| v.as_i64()).unwrap_or(0);
+        let uname = u.get("uname").and_then(|v| v.as_str()).unwrap_or("");
+        let lv = u.get("level").and_then(|v| v.as_i64()).unwrap_or(1);
+        let vip = u.get("vip").and_then(|v| v.as_i64()).unwrap_or(9);
+        let gold = u.get("gold_num").and_then(|v| v.as_i64()).unwrap_or(0);
+        let belly = u.get("belly_num").and_then(|v| v.as_i64()).unwrap_or(0);
+        let exec = u.get("cur_execution").and_then(|v| v.as_i64()).unwrap_or(0);
+        let prestige = u.get("prestige_num").and_then(|v| v.as_i64()).unwrap_or(0);
+        let exp_num = u.get("experience_num").and_then(|v| v.as_i64()).unwrap_or(0);
+        chars_json.push_str(&format!(
+            r#"{{"uid":{uid},"uname":"{}","level":{lv},"vip":{vip},"gold_num":{gold},"belly_num":{belly},"cur_execution":{exec},"prestige_num":{prestige},"experience_num":{exp_num}}}"#,
+            json_escape(uname)
+        ));
+    }
+    chars_json.push(']');
+
+    let presets = r#"[{"id":101101,"name":"GM Weapon - Supreme Pirate Blade (+200)"},{"id":102101,"name":"GM Armor - Emperor Coat (+200)"},{"id":103101,"name":"GM Ring - Conquerors Ring (+200)"},{"id":104101,"name":"GM Cloak - Yonko Cloak (+200)"},{"id":105101,"name":"GM Necklace - AllBlue Amulet (+200)"},{"id":106101,"name":"GM Hat - Straw Hat Supreme (+200)"},{"id":60001,"name":"Devil Fruit Chest (Qu\u1ea3 \u00c1c Qu\u1ef7)"}]"#;
+    let body = format!(
+        r#"{{"status":"y","tool":"LouLx GM Console (Console.class.php)","presets":{presets},"characters":{chars_json}}}"#
+    );
+    json_ok(body, vec![])
+}
+
+/// Handle `POST /api/gm/execute` (`legacy-ref/rpcfw/module/console/Console.class.php:305-1100`).
+pub fn handle_gm_execute(
+    form: &BTreeMap<String, String>,
+    store: &DataStore,
+    persist_path: Option<&Path>,
+) -> PortalHttpResponse {
+    let target_name = form
+        .get("uname")
+        .or_else(|| form.get("account"))
+        .map(|s| s.trim())
+        .unwrap_or("");
+    let cmd = form.get("cmd").map(|s| s.trim()).unwrap_or("addItem");
+    let val1: i64 = form
+        .get("val1")
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(101101);
+    let val2: i64 = form
+        .get("val2")
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(1);
+
+    let users = if target_name.is_empty() {
+        store.select("t_user", &["uid", "uname"], &[], Some(1))
+    } else {
+        store.select(
+            "t_user",
+            &["uid", "uname"],
+            &[(
+                "uname",
+                WhereCond::Eq(ColumnValue::Text(target_name.to_string())),
+            )],
+            Some(1),
+        )
+    };
+
+    let Some(u) = users.first() else {
+        return json_ok(
+            r#"{"info":"Kh\u00f4ng t\u00ecm th\u1ea5y nh\u00e2n v\u1eadt \u0111\u1ec3 th\u1ef1c thi GM!","status":"n"}"#.to_string(),
+            vec![],
+        );
+    };
+    let uid = u.get("uid").and_then(|v| v.as_i64()).unwrap_or(20001);
+    let uname = u.get("uname").and_then(|v| v.as_str()).unwrap_or("Pirate");
+
+    let msg = match cmd {
+        "gold" => {
+            let capped = val1.clamp(0, 2_000_000_000);
+            store.update(
+                "t_user",
+                &[("gold_num", UpdateOp::Set(ColumnValue::Int(capped)))],
+                &[("uid", WhereCond::Eq(ColumnValue::Int(uid)))],
+            );
+            format!("GM Console: Set gold_num = {capped} for {uname} (UID {uid})")
+        }
+        "belly" => {
+            let capped = val1.clamp(0, 2_000_000_000);
+            store.update(
+                "t_user",
+                &[("belly_num", UpdateOp::Set(ColumnValue::Int(capped)))],
+                &[("uid", WhereCond::Eq(ColumnValue::Int(uid)))],
+            );
+            format!("GM Console: Set belly_num = {capped} for {uname} (UID {uid})")
+        }
+        "vip" => {
+            let capped = val1.clamp(0, 12);
+            store.update(
+                "t_user",
+                &[("vip", UpdateOp::Set(ColumnValue::Int(capped)))],
+                &[("uid", WhereCond::Eq(ColumnValue::Int(uid)))],
+            );
+            format!("GM Console: Set VIP = {capped} for {uname} (UID {uid})")
+        }
+        "execution" => {
+            let capped = val1.clamp(0, 500_000);
+            store.update(
+                "t_user",
+                &[("cur_execution", UpdateOp::Set(ColumnValue::Int(capped)))],
+                &[("uid", WhereCond::Eq(ColumnValue::Int(uid)))],
+            );
+            format!("GM Console: Set cur_execution = {capped} for {uname} (UID {uid})")
+        }
+        "prestige" => {
+            let capped = val1.clamp(0, 2_000_000_000);
+            store.update(
+                "t_user",
+                &[("prestige_num", UpdateOp::Set(ColumnValue::Int(capped)))],
+                &[("uid", WhereCond::Eq(ColumnValue::Int(uid)))],
+            );
+            format!("GM Console: Set prestige_num = {capped} for {uname} (UID {uid})")
+        }
+        "experience" => {
+            let capped = val1.clamp(0, 2_000_000_000);
+            store.update(
+                "t_user",
+                &[("experience_num", UpdateOp::Set(ColumnValue::Int(capped)))],
+                &[("uid", WhereCond::Eq(ColumnValue::Int(uid)))],
+            );
+            format!("GM Console: Set experience_num = {capped} for {uname} (UID {uid})")
+        }
+        "hero" => {
+            let htid = val1.max(10001);
+            let hid = store.id_gen.next_id("hid", 1) as i64;
+            let mut row = BTreeMap::new();
+            row.insert("hid".to_string(), ColumnValue::Int(hid));
+            row.insert("uid".to_string(), ColumnValue::Int(uid));
+            row.insert("htid".to_string(), ColumnValue::Int(htid));
+            row.insert("level".to_string(), ColumnValue::Int(val2.clamp(1, 200)));
+            row.insert("all_exp".to_string(), ColumnValue::Int(0));
+            row.insert("curr_hp".to_string(), ColumnValue::Int(500_000));
+            row.insert("goodwill_level".to_string(), ColumnValue::Int(10));
+            row.insert("haki_level".to_string(), ColumnValue::Int(10));
+            store.insert_or_update("t_hero", "hid", row, false);
+            format!("GM Console: Recruited Hero htid={htid} (hid={hid}) for {uname}")
+        }
+        _ => {
+            // Default: `addItem` (`Console.class.php:1006-1040`)
+            let item_tmpl_id = val1.max(1);
+            let item_num = val2.clamp(1, 999);
+            let item_id = store.id_gen.next_id("item_id", 1) as i64;
+            let existing = store.select(
+                "t_bag",
+                &["gid"],
+                &[("uid", WhereCond::Eq(ColumnValue::Int(uid)))],
+                Some(200),
+            );
+            let next_gid = existing
+                .iter()
+                .filter_map(|r| r.get("gid").and_then(|v| v.as_i64()))
+                .max()
+                .unwrap_or(0)
+                + 1;
+            let mut item_row = BTreeMap::new();
+            item_row.insert("item_id".to_string(), ColumnValue::Int(item_id));
+            item_row.insert("uid".to_string(), ColumnValue::Int(uid));
+            item_row.insert(
+                "item_template_id".to_string(),
+                ColumnValue::Int(item_tmpl_id),
+            );
+            item_row.insert("item_num".to_string(), ColumnValue::Int(item_num));
+            item_row.insert("reinforce_level".to_string(), ColumnValue::Int(200));
+            store.insert_or_update("t_item", "item_id", item_row, false);
+
+            let mut bag_row = BTreeMap::new();
+            bag_row.insert("bag_key".to_string(), ColumnValue::Int(uid * 1000 + next_gid));
+            bag_row.insert("uid".to_string(), ColumnValue::Int(uid));
+            bag_row.insert("gid".to_string(), ColumnValue::Int(next_gid));
+            bag_row.insert("item_id".to_string(), ColumnValue::Int(item_id));
+            bag_row.insert(
+                "item_template_id".to_string(),
+                ColumnValue::Int(item_tmpl_id),
+            );
+            bag_row.insert("item_num".to_string(), ColumnValue::Int(item_num));
+            bag_row.insert("reinforce_level".to_string(), ColumnValue::Int(200));
+            store.insert_or_update("t_bag", "bag_key", bag_row, false);
+            format!(
+                "GM Console: Added Item template={item_tmpl_id} x{item_num} (item_id={item_id}, slot={next_gid}) to {uname}"
+            )
+        }
+    };
+
+    if let Some(p) = persist_path {
+        let _ = store.save_to_disk(p);
+    }
+
+    json_ok(
+        format!(r#"{{"info":"{}","status":"y"}}"#, json_escape(&msg)),
+        vec![],
+    )
 }
 
 #[cfg(test)]

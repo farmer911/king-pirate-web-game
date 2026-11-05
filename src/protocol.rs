@@ -380,12 +380,38 @@ mod tests {
             );
         }
 
-        // 4. Verify `web/src/App.tsx` contains verbatim `legacy-ref/www/index.php:61-65` text
+        // 4. Verify `web/src/App.tsx` contains verbatim `legacy-ref/www/index.php:61-65` text,
+        //    zero `<iframe` wrappers, zero `.php` code strings, and direct Ruffle `createPlayer` mount
         let app_tsx = fs::read_to_string("web/src/App.tsx").expect("web/src/App.tsx must exist");
         assert!(
             app_tsx.contains("Monkey D Dragon, Tezoro, CP0 Lucci, CP0 Kaku")
-                && app_tsx.contains("id=\"spa-game-shell\""),
-            "HONESTY VIOLATION: web/src/App.tsx does not match verbatim legacy-ref/www/index.php:61 or Option B SPA shell"
+                && app_tsx.contains("id=\"spa-game-shell\"")
+                && app_tsx.contains("id=\"ruffle-game-container\"")
+                && app_tsx.contains("createPlayer"),
+            "HONESTY VIOLATION: web/src/App.tsx does not match verbatim index.php:61 or direct Ruffle WebAssembly mount"
+        );
+        for (line_no, line) in app_tsx.lines().enumerate() {
+            let trimmed = line.trim();
+            if !trimmed.starts_with("//")
+                && !trimmed.starts_with("/*")
+                && !trimmed.starts_with('*')
+                && !trimmed.starts_with("{/*")
+            {
+                assert!(
+                    !trimmed.contains(".php") && !trimmed.contains("<iframe"),
+                    "HONESTY VIOLATION: web/src/App.tsx:{} contains forbidden `.php` or `<iframe`: {}",
+                    line_no + 1,
+                    trimmed
+                );
+            }
+        }
+        assert!(
+            !prod_code.contains(
+                "(\"user\", \"getSwitch\" | \"getSwitchInfo\") | (\"switch\", \"getSwitchInfo\") => {\n            Amf3Value::dense_list([])"
+            ) && prod_code.contains("fetchVipSalary")
+                && prod_code.contains("fetchPresigeSalary")
+                && prod_code.contains("fetchSalary"),
+            "HONESTY VIOLATION: src/domain/mod.rs still locks SwitchDef or lacks charity/achievements salary handlers"
         );
 
         // 5. Verify zero backup/junk files (.orig, .bk, .bak, .jsfl, .2017*-.2020*) in client-assets/
