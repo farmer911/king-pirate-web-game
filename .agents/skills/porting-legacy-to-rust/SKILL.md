@@ -31,6 +31,11 @@ Before writing any function, struct, or constant, check this table. If it alread
 | Module | File | Provided Primitives (Reuse — Never Duplicate) | Ground-Truth Source |
 | :--- | :--- | :--- | :--- |
 | **Wire Protocol** | `src/protocol.rs` | `HEAD_SIZE`, `AMF3_PREFIX`, `FLAG_COMPRESSED`, `FLAG_ENCRYPTED`, `FLAG_UNWRAP_RET`, `MESS_CODE_PRIMARY`, `MESS_CODE_SECONDARY`, `BABEL_CRYPT_KEY`, `BABEL_CRYPT_IV`, `PLAY_HASH_KEY`, `FrameHeader::{encode,decode}`, `build_xor_checksum_buffer`, `pack_pid_bytes`, `unpack_pid_bytes` | `PHPProxy.class.php:108-381`, `BabelCrypt.class.php:18-66`, `game20002.xml:51-55` |
+| **AMF3 Codec** | `src/amf3.rs` | `Amf3Value`, `amf3_encode`, `amf3_decode`, `write_u29`, `read_u29`, `write_amf3_str` | `Util.class.php:492-538`, `PHPProxy.class.php:185-269` |
+| **Crypto & Auth Guard** | `src/crypt.rs` | `md5_digest`, `md5_hex`, `phpproxy_checksum`, `babel_encrypt_number`, `babel_decrypt_number`, `compute_login_play_hash`, `verify_login_request` | `BabelCrypt.class.php:18-66`, `UserLogic.class.php:23-82`, `User.class.php:47-64` |
+| **In-Memory Player Actor** | `src/actor.rs` | `UPPER_LIMIT_BELLY`, `PlayerSessionActor`, `PlayerDirtyDelta`, `add_belly`, `add_gold`, `add_prestige`, `add_execution`, `add_fight_cdtime`, `move_in_town`, `take_dirty_delta` | `OtherUserObj.class.php:53-55, 108-130, 447-650` |
+| **Dual-Mode Data Store** | `src/data.rs` | `SqlDialect::{SqliteWal,MariaDbInnoDb}`, `ColumnValue`, `UpdateOp`, `WhereCond`, `build_upsert_sql`, `IdGenerator::next_id`, `DataStore::{insert_or_update,select,select_count,update,delete,apply_write_behind_delta}` | `NewData.class.php:18-48, 748-988`, `Framework.cfg.php:40` |
+| **RPC Gateway** | `src/gateway.rs` | `FLASH_POLICY_REQUEST`, `FLASH_POLICY_RESPONSE`, `ConnectionSession`, `MethodAccessTier`, `classify_method`, `authorize_rpc_call`, `encode_framed_packet`, `decode_framed_packet` | `game20002.xml:39-100`, `RPCFramework.class.php:348-404, 783-865`, `Framework.cfg.php:203-411` |
 | **Entrypoint** | `src/main.rs` | Binary bootstrap & compile-time lint gate (`#![deny(dead_code, unused_imports, unused_variables)]`) | `start_all.sh` |
 
 ## Mandatory 5-Step Porting Workflow

@@ -1,29 +1,34 @@
 #![deny(dead_code, unused_imports, unused_variables)]
 
+pub mod actor;
+pub mod amf3;
+pub mod crypt;
+pub mod data;
+pub mod gateway;
 pub mod protocol;
 
 fn main() {
     let hdr = protocol::FrameHeader {
         body_size: 0,
-        flag: 0,
+        flag: protocol::FLAG_ENCRYPTED | protocol::FLAG_UNWRAP_RET,
     };
-    println!(
-        "King Pirate Rust Server v0.1.0 initialized (header_size={}, mess_code={}, key_prefix={}, sample_hdr={:?})",
-        protocol::HEAD_SIZE,
-        String::from_utf8_lossy(protocol::MESS_CODE_PRIMARY),
-        String::from_utf8_lossy(protocol::BABEL_CRYPT_KEY),
-        hdr.encode(),
+    let enc_pid = crypt::babel_encrypt_number(202621270);
+    let dec_pid = crypt::babel_decrypt_number(&enc_pid).unwrap_or(0);
+    let mut actor = actor::PlayerSessionActor::new(20001, dec_pid, 1, "Luffy".to_string());
+    let _ = actor.add_gold(50);
+    let store = data::DataStore::new(data::SqlDialect::SqliteWal);
+    if let Some(delta) = actor.take_dirty_delta() {
+        let _ = store.apply_write_behind_delta(&delta);
+    }
+    let sample_pkt = gateway::encode_framed_packet(
+        &amf3::Amf3Value::String("ok".to_string()),
+        hdr.flag,
     );
-    let _ = (
-        protocol::AMF3_PREFIX,
-        protocol::MESS_CODE_SECONDARY,
-        protocol::BABEL_CRYPT_IV,
-        protocol::PLAY_HASH_KEY,
-        protocol::build_xor_checksum_buffer(protocol::MESS_CODE_PRIMARY, &[]),
-        protocol::unpack_pid_bytes(&protocol::pack_pid_bytes(1)),
-        hdr.is_compressed(),
-        hdr.is_encrypted(),
-        hdr.should_unwrap_ret(),
-        protocol::FrameHeader::decode(&[0; 8]),
+    println!(
+        "King Pirate Rust Server v0.2.0 ready (header_size={}, pid={}, pkt_bytes={}, policy_len={})",
+        protocol::HEAD_SIZE,
+        dec_pid,
+        sample_pkt.len(),
+        gateway::FLASH_POLICY_RESPONSE.len()
     );
 }

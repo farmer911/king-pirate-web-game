@@ -1,0 +1,32 @@
+services:
+  king-pirate:
+    build: .
+    container_name: king-pirate-server
+    restart: unless-stopped
+    ports:
+      - "843:843"
+      - "8002:8002"
+      - "8003:8003"
+      - "8081:8081"
+    environment:
+      - DATABASE_URL=mysql://pirate:admin@mariadb:3306/pirate20002
+      - LISTEN_ADDR=0.0.0.0:8002
+    depends_on:
+      - mariadb
+
+  mariadb:
+    image: mariadb:10.11
+    container_name: king-pirate-mariadb
+    restart: unless-stopped
+    environment:
+      - MARIADB_ROOT_PASSWORD=admin
+      - MARIADB_DATABASE=pirate20002
+      - MARIADB_USER=pirate
+      - MARIADB_PASSWORD=admin
+    ports:
+      - "33061:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+volumes:
+  mariadb_data:
