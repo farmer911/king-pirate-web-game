@@ -230,21 +230,34 @@ pub fn rpc_create_user(
     }
 
     let uid = store.id_gen.next_id("uid", 1) as u32;
+    let master_hid = (uid as i64) * 100 + 1;
+    let master_htid = master_htid_for_utid(utid) as i64;
     let mut row = RowMap::new();
     row.insert("uid".to_string(), ColumnValue::Int(uid as i64));
     row.insert("pid".to_string(), ColumnValue::Int(pid as i64));
     row.insert("utid".to_string(), ColumnValue::Int(utid as i64));
     row.insert("uname".to_string(), ColumnValue::Text(trimmed.to_string()));
+    row.insert("master_hid".to_string(), ColumnValue::Int(master_hid));
     row.insert("level".to_string(), ColumnValue::Int(1));
     row.insert("vip".to_string(), ColumnValue::Int(9));
     row.insert("belly_num".to_string(), ColumnValue::Int(10_000_000));
     row.insert("gold_num".to_string(), ColumnValue::Int(1_000_000));
     row.insert("prestige_num".to_string(), ColumnValue::Int(0));
     row.insert("experience_num".to_string(), ColumnValue::Int(1_000_000));
-    row.insert("cur_execution".to_string(), ColumnValue::Int(100));
+    row.insert("blood_package".to_string(), ColumnValue::Int(0));
+    row.insert("cur_execution".to_string(), ColumnValue::Int(100_000));
     row.insert("last_town_id".to_string(), ColumnValue::Int(1));
     row.insert("last_xy".to_string(), ColumnValue::Int((19 << 16) | 25));
     store.insert_or_update("t_user", "uid", row, false);
+
+    let mut hero_row = RowMap::new();
+    hero_row.insert("hid".to_string(), ColumnValue::Int(master_hid));
+    hero_row.insert("uid".to_string(), ColumnValue::Int(uid as i64));
+    hero_row.insert("htid".to_string(), ColumnValue::Int(master_htid));
+    hero_row.insert("level".to_string(), ColumnValue::Int(1));
+    hero_row.insert("all_exp".to_string(), ColumnValue::Int(0));
+    hero_row.insert("curr_hp".to_string(), ColumnValue::Int(1000));
+    store.insert_or_update("t_hero", "hid", hero_row, false);
 
     Ok((uid, Amf3Value::String("ok".to_string())))
 }
@@ -258,7 +271,22 @@ pub fn rpc_user_character_login(
     let pid = session.pid.ok_or("fake: missing global.pid")?;
     let rows = store.select(
         "t_user",
-        &["uid", "pid", "utid", "uname", "gold_num", "belly_num"],
+        &[
+            "uid",
+            "pid",
+            "utid",
+            "uname",
+            "level",
+            "vip",
+            "gold_num",
+            "belly_num",
+            "prestige_num",
+            "experience_num",
+            "blood_package",
+            "cur_execution",
+            "last_town_id",
+            "last_xy",
+        ],
         &[
             ("uid", WhereCond::Eq(ColumnValue::Int(uid as i64))),
             ("pid", WhereCond::Eq(ColumnValue::Int(pid as i64))),
@@ -273,13 +301,42 @@ pub fn rpc_user_character_login(
         Some(ColumnValue::Text(s)) => s.clone(),
         _ => "Pirate".to_string(),
     };
+    let town_id = row.get("last_town_id").and_then(|v| v.as_i64()).unwrap_or(1) as u32;
     session.uid = Some(uid);
     session.utid = Some(utid);
-    session.town_id = Some(1);
+    session.town_id = Some(town_id);
 
     let mut actor = PlayerSessionActor::new(uid, pid, utid, uname);
-    actor.gold_num = row.get("gold_num").and_then(|v| v.as_i64()).unwrap_or(100);
-    actor.belly_num = row.get("belly_num").and_then(|v| v.as_i64()).unwrap_or(1000);
+    actor.level = row.get("level").and_then(|v| v.as_i64()).unwrap_or(1) as u16;
+    actor.vip = row.get("vip").and_then(|v| v.as_i64()).unwrap_or(9) as u8;
+    actor.gold_num = row.get("gold_num").and_then(|v| v.as_i64()).unwrap_or(1_000_000);
+    actor.belly_num = row.get("belly_num").and_then(|v| v.as_i64()).unwrap_or(10_000_000);
+    actor.prestige_num = row.get("prestige_num").and_then(|v| v.as_i64()).unwrap_or(0);
+    actor.experience_num = row
+        .get("experience_num")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1_000_000);
+    actor.blood_package = row.get("blood_package").and_then(|v| v.as_i64()).unwrap_or(0);
+    actor.cur_execution = row
+        .get("cur_execution")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(100_000) as i32;
+    actor.town_id = town_id;
+    if let Some(xy) = row.get("last_xy").and_then(|v| v.as_i64()) {
+        actor.town_x = ((xy >> 16) & 0xFFFF) as u16;
+        actor.town_y = (xy & 0xFFFF) as u16;
+    }
+    let hero_rows = store.select(
+        "t_hero",
+        &["level"],
+        &[("uid", WhereCond::Eq(ColumnValue::Int(uid as i64)))],
+        Some(1),
+    );
+    if let Some(hrow) = hero_rows.first() {
+        if let Some(hlv) = hrow.get("level").and_then(|v| v.as_i64()) {
+            actor.level = hlv.clamp(1, 200) as u16;
+        }
+    }
     Ok((actor, Amf3Value::String("ok".to_string())))
 }
 

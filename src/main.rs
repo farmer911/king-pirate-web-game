@@ -8,6 +8,7 @@ pub mod crypt;
 pub mod data;
 pub mod domain;
 pub mod gateway;
+pub mod portal;
 pub mod protocol;
 
 use std::io::{Read, Write};
@@ -224,7 +225,7 @@ pub fn run_live_daemon(
     });
 
     let store_tcp = Arc::clone(&store);
-    let persist_tcp = persist_path;
+    let persist_tcp = persist_path.clone();
     std::thread::spawn(move || {
         for incoming in tcp_listener.incoming().flatten() {
             let st = Arc::clone(&store_tcp);
@@ -235,9 +236,11 @@ pub fn run_live_daemon(
 
     for incoming in http_listener.incoming().flatten() {
         let root = assets_root.clone();
+        let st = Arc::clone(&store);
+        let pp = persist_path.clone();
         std::thread::spawn(move || {
             let mut stream = incoming;
-            let _ = gateway::handle_http_stream(&mut stream, &root);
+            let _ = gateway::handle_http_stream_with_store(&mut stream, &root, Some(&st), Some(&pp));
         });
     }
     Ok(())

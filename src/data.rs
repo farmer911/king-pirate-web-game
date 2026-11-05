@@ -128,8 +128,10 @@ pub fn build_upsert_sql(
     }
 }
 
-/// Lock-free atomic ID sequence generator replacing `dataproxy` `showNextId` (`FrameworkConfig::MIN_UID = 20000`).
+/// Lock-free atomic ID sequence generator replacing `dataproxy` `showNextId` (`FrameworkConfig::MIN_UID = 20000`)
+/// and `account` `AUTO_INCREMENT = 202621271` (`legacy-ref/schema/t9-rxhzw-web-schema.sql:37`).
 pub struct IdGenerator {
+    pid_seq: AtomicU64,
     uid_seq: AtomicU64,
     hid_seq: AtomicU64,
     item_seq: AtomicU64,
@@ -140,6 +142,7 @@ pub struct IdGenerator {
 impl IdGenerator {
     pub const fn new() -> Self {
         Self {
+            pid_seq: AtomicU64::new(202_621_271),
             uid_seq: AtomicU64::new(20001),
             hid_seq: AtomicU64::new(100001),
             item_seq: AtomicU64::new(1000001),
@@ -148,10 +151,11 @@ impl IdGenerator {
         }
     }
 
-    /// Atomically allocate `count` sequential IDs for the given table key (`uid`, `hid`, `item_id`, `brid`, `guild_id`).
+    /// Atomically allocate `count` sequential IDs for the given table key (`pid`, `uid`, `hid`, `item_id`, `brid`, `guild_id`).
     pub fn next_id(&self, key: &str, count: u64) -> u64 {
         let step = count.max(1);
         match key {
+            "pid" => self.pid_seq.fetch_add(step, Ordering::SeqCst),
             "uid" => self.uid_seq.fetch_add(step, Ordering::SeqCst),
             "hid" => self.hid_seq.fetch_add(step, Ordering::SeqCst),
             "item_id" => self.item_seq.fetch_add(step, Ordering::SeqCst),
@@ -325,7 +329,13 @@ impl DataStore {
                 let mut assoc_row = BTreeMap::new();
                 for (k, v) in row {
                     let amf_v = match v {
-                        ColumnValue::Int(n) => Amf3Value::Integer(*n as i32),
+                        ColumnValue::Int(n) => {
+                            if (*n >= i32::MIN as i64) && (*n <= i32::MAX as i64) {
+                                Amf3Value::Integer(*n as i32)
+                            } else {
+                                Amf3Value::Double(*n as f64)
+                            }
+                        }
                         ColumnValue::Text(s) => Amf3Value::String(s.clone()),
                         ColumnValue::Blob(b) => Amf3Value::ByteArray(b.clone()),
                     };
@@ -339,6 +349,10 @@ impl DataStore {
             tables_map.insert(tname.clone(), Amf3Value::dense_list(dense_rows));
         }
         let root = Amf3Value::assoc_map([
+            (
+                "pid_seq",
+                Amf3Value::Integer(self.id_gen.pid_seq.load(Ordering::SeqCst) as i32),
+            ),
             (
                 "uid_seq",
                 Amf3Value::Integer(self.id_gen.uid_seq.load(Ordering::SeqCst) as i32),
@@ -370,6 +384,9 @@ impl DataStore {
         }
         let bytes = std::fs::read(path).map_err(|_| "failed to read DataStore snapshot")?;
         let root = amf3_decode(&bytes)?;
+        if let Some(pid_next) = root.get_field("pid_seq").and_then(|v| v.as_i64()) {
+            self.id_gen.pid_seq.store(pid_next as u64, Ordering::SeqCst);
+        }
         if let Some(uid_next) = root.get_field("uid_seq").and_then(|v| v.as_i64()) {
             self.id_gen.uid_seq.store(uid_next as u64, Ordering::SeqCst);
         }

@@ -360,17 +360,56 @@ pub fn mime_type_for_path(path: &str) -> &'static str {
 
 /// Handle a single HTTP request on `:8081` serving `/T9NuoYa/*`, `/play.html`, and `/crossdomain.xml`.
 pub fn handle_http_stream(stream: &mut TcpStream, assets_root: &Path) -> std::io::Result<()> {
-    let mut buf = [0u8; 8192];
-    let n = stream.read(&mut buf)?;
+    handle_http_stream_with_store(stream, assets_root, None, None)
+}
+
+/// Handle a single HTTP request on `:8081`, serving both the Legacy Web Portal (`t9-rxhzw-web`)
+/// backed by `DataStore` (`t_account`, `t_server`, `t_user`, `t_hero`) and static client assets (`/T9NuoYa/*`).
+pub fn handle_http_stream_with_store(
+    stream: &mut TcpStream,
+    assets_root: &Path,
+    store: Option<&crate::data::DataStore>,
+    persist_path: Option<&Path>,
+) -> std::io::Result<()> {
+    let mut buf = Vec::with_capacity(8192);
+    let mut chunk = [0u8; 4096];
+    let n = stream.read(&mut chunk)?;
     if n == 0 {
         return Ok(());
     }
-    let req_str = String::from_utf8_lossy(&buf[..n]);
-    let first_line = req_str.lines().next().unwrap_or("");
+    buf.extend_from_slice(&chunk[..n]);
+
+    if let Some(hdr_end) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+        let body_start = hdr_end + 4;
+        let hdr_str = String::from_utf8_lossy(&buf[..hdr_end]);
+        let content_len = hdr_str
+            .lines()
+            .find_map(|line| {
+                let lower = line.to_ascii_lowercase();
+                if lower.starts_with("content-length:") {
+                    line.split_once(':')
+                        .and_then(|(_, v)| v.trim().parse::<usize>().ok())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0);
+        while buf.len() < body_start + content_len && buf.len() < 65536 {
+            let m = stream.read(&mut chunk)?;
+            if m == 0 {
+                break;
+            }
+            buf.extend_from_slice(&chunk[..m]);
+        }
+    }
+
+    let req_str = String::from_utf8_lossy(&buf);
+    let (headers_part, body_part) = req_str.split_once("\r\n\r\n").unwrap_or((&req_str, ""));
+    let first_line = headers_part.lines().next().unwrap_or("");
     let mut parts = first_line.split_whitespace();
     let method = parts.next().unwrap_or("GET");
     let raw_target = parts.next().unwrap_or("/");
-    let clean_path = raw_target.split('?').next().unwrap_or("/");
+    let (clean_path, query_str) = raw_target.split_once('?').unwrap_or((raw_target, ""));
 
     if clean_path.contains("..") {
         let resp = b"HTTP/1.1 403 Forbidden\r\nContent-Length: 9\r\nConnection: close\r\n\r\nForbidden";
@@ -391,8 +430,41 @@ pub fn handle_http_stream(stream: &mut TcpStream, assets_root: &Path) -> std::io
         return stream.flush();
     }
 
+    if let Some(st) = store {
+        if let Some(portal_resp) = crate::portal::try_handle_portal_route(
+            method,
+            clean_path,
+            query_str,
+            headers_part,
+            body_part,
+            st,
+            persist_path,
+        ) {
+            let mut hdr = format!(
+                "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n",
+                portal_resp.status_line,
+                portal_resp.content_type,
+                portal_resp.body.len()
+            );
+            for extra in &portal_resp.extra_headers {
+                hdr.push_str(extra);
+                hdr.push_str("\r\n");
+            }
+            hdr.push_str("\r\n");
+            stream.write_all(hdr.as_bytes())?;
+            if method != "HEAD" && !portal_resp.body.is_empty() {
+                stream.write_all(&portal_resp.body)?;
+            }
+            return stream.flush();
+        }
+    }
+
     if clean_path == "/" || clean_path == "/play.html" {
-        let query = raw_target.split_once('?').map(|(_, q)| q).unwrap_or("sid=202621270");
+        let query = if query_str.is_empty() {
+            "sid=202621270"
+        } else {
+            query_str
+        };
         let loc = format!("/T9NuoYa/T9NuoYa.html?{}", query);
         let hdr = format!(
             "HTTP/1.1 302 Found\r\nLocation: {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",

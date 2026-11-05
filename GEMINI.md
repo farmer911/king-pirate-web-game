@@ -97,10 +97,28 @@ This document is the **Single Source of Truth (SSoT)** for the **King Pirate** p
 
 | Component | Technology | Path | Status |
 | :--- | :--- | :--- | :--- |
-| **Rust Server Crate & Wire Protocol** | **Rust 1.99 (`edition = "2024"`, `#![deny(dead_code)]`)** | `Cargo.toml`, `src/{main,protocol,amf3,crypt,actor,data,gateway,btstore,battle}.rs`, `src/domain/*.rs`, `Dockerfile`, `docker-compose.yml` | ✅ Phase 1, 2, 3 & 4 Complete (`16/16` `cargo test` Pass) |
+| **Rust Server Crate & Wire Protocol** | **Rust 1.99 (`edition = "2024"`, `#![deny(dead_code)]`)** | `Cargo.toml`, `src/{main,protocol,amf3,crypt,actor,data,gateway,portal,btstore,battle}.rs`, `src/domain/*.rs`, `Dockerfile`, `docker-compose.yml` | ✅ Phase 1–6 Complete (`19/19` `cargo test` Pass) |
+| **Legacy Web Portal (`t9-rxhzw-web`)** | **Native Rust HTTP Portal (`src/portal.rs` + `src/gateway.rs`)** | `/`, `/index.php`, `/member.php`, `/core/Cx_Ajax.php`, `/app/sys/{reg,login,editpass,findpass}.php`, `/app/Game/{index,game}.php`, `/app/dh/{index,ajax}.php`, `/level.php`, `/fix.php` | ✅ 100% Ported & E2E Chrome Verified |
 | **Peak-Performance Actor + Hybrid Storage** | **In-Memory `PlayerSessionActor` (`~50 ns`) + Write-Behind SQLite (Mac Dev) / MariaDB (Linux Docker Prod)** | `REWRITE_PLAN.md` (Section 5–7), `docs/rewrite-plan.html` | ✅ Forensic Code & Security Verified |
 | **Forensic Investigation & Rust Plan** | **Markdown + Archify Interactive HTML** | `REWRITE_PLAN.md`, `.agents/STATE.md`, `docs/rewrite-plan.html` | ✅ 100% Ground-Truth Verified |
 | **Legacy Ground-Truth Corpus** | **PHP 5.5 + XML + DWARF C++ Headers + SQL Schema** | `legacy-ref/` | ✅ Extracted & Sanitized (`0` CJK chars) |
 | **Second Brain (Graphify + Obsidian)** | **NetworkX + Obsidian Markdown Vault** | `graphify-out/GRAPH_REPORT.md`, `graphify-out/obsidian/` | ✅ Initialized & Synced |
 | **Agent Rules (`always_on`)** | **8 Enforced Rules** | `.agents/rules/{01..05,07-evidence-based-truth-no-sycophancy,08-peak-performance-best-outcome,keep-up-to-date}.md` | ✅ Active (`always_on`) |
 | **TDD Skills (`obra/superpowers`)** | **10 TDD Skills (100% English)** | `.agents/skills/{empirical-metrics-and-knowledge-tools,zero-defect-real-runtime-verification,engineering-audit-gate,simplify,porting-legacy-to-rust,updating-project-knowledge,planning-with-archify,test-driven-development,writing-skills,verification-before-completion}/SKILL.md` | ✅ Verified (`RED -> GREEN -> REFACTOR`) |
+
+---
+
+## 9. Lessons Learned Log (`Rule 02` Continuous Learning Loop)
+
+- **[2026-11-06] Stale Daemon Binary (`cargo test` vs `cargo build`) & Incomplete Post-Creation Verification:**
+  - *Where:* Launching `./target/debug/king-pirate serve` after editing `src/gateway.rs` (`PUBLIC_RPC_CLASSES` adding `payback`) and `src/domain/mod.rs` (`city.checkEnter -> true`).
+  - *How & Why:* Running `cargo check && cargo test` only compiled the test harness binary (`target/debug/deps/king_pirate-*`), leaving `target/debug/king-pirate` stale without `payback` in `PUBLIC_RPC_CLASSES`. When the user created a character, `Main.swf` called `payback.getCurAvailablePayBackIds`, which the stale binary rejected with `close: undefined method`, disconnecting the socket at the map loading bar.
+  - *Prevention:* Always run `cargo build` before launching `./target/debug/king-pirate serve`, and always click the Start Game button in real Chrome to verify the character enters the Town Map with `0` disconnect dialogs.
+- **[2026-11-06] Never Bypass Legacy Web Portal (`t9-rxhzw-web` Register, Login, Member Center, Server Selection):**
+  - *Where:* `src/gateway.rs:394-403` previously redirected `GET /` directly to `/T9NuoYa/T9NuoYa.html?sid=202621270`.
+  - *How & Why:* Took a shortcut by skipping the legacy `t9-rxhzw-web` portal (`client-assets/index.php`, `member.php`, `core/Cx_Ajax.php`, `app/Game/{index,game}.php`, `app/dh/{index,ajax}.php`, `t9-rxhzw-web-schema.sql`).
+  - *Prevention:* Ported the complete legacy web portal into `src/portal.rs` backed by `DataStore` (`t_account` with `AUTO_INCREMENT = 202621271` and `dj = 1,000,000,000` per `core/config.php:14`, plus `t_server`).
+- **[2026-11-06] Strict Ground-Truth Constants (`User.cfg.php`) & AS3 Return Payloads (`growupplan`, `charity`, `elves`):**
+  - *Where:* `src/actor.rs:72`, `src/domain/user.rs:244`, and `src/domain/mod.rs:140-175`.
+  - *How & Why:* Used `cur_execution = 100` instead of `UserConf::INIT_EXECUTION = 100000` (`User.cfg.php:188`), failed to load `vip` and `cur_execution` in `rpc_user_character_login`, and returned generic `{}` for `growupplan.getInfo`, `charity.getCharityInfo`, and `elves.get` (causing 3 AS3 `TypeError: Error #1010` logs in Ruffle).
+  - *Prevention:* Enforced `INIT_EXECUTION = 100_000` and `INIT_VIP = 9` in `src/actor.rs` and `src/domain/user.rs`, and implemented exact PHP ground-truth return payloads for `growupplan.getInfo` (`-1`), `charity.getCharityInfo` (`va_charity_info.val_ret`), and `elves.get` (`va_elves`).

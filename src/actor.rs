@@ -56,20 +56,20 @@ impl PlayerSessionActor {
             utid,
             uname,
             level: 1,
-            vip: 0,
-            master_hid: uid * 10 + 1,
+            vip: 9,
+            master_hid: uid * 100 + 1,
             cur_formation: 10001,
             guild_id: 0,
             town_id: 1,
-            town_x: 10,
-            town_y: 10,
-            belly_num: 1_000,
-            gold_num: 100,
+            town_x: 19,
+            town_y: 25,
+            belly_num: 10_000_000,
+            gold_num: 1_000_000,
             prestige_num: 0,
-            experience_num: 0,
+            experience_num: 1_000_000,
             food_num: 0,
             blood_package: 0,
-            cur_execution: 100,
+            cur_execution: 100_000,
             fight_cdtime: 0,
             protect_cdtime: 0,
             dirty_columns: BTreeMap::new(),
@@ -165,16 +165,17 @@ mod tests {
     #[test]
     fn test_server_authoritative_gold_and_belly_rejects_underflow() {
         let mut actor = PlayerSessionActor::new(20001, 202621270, 1, "Luffy".to_string());
-        assert_eq!(actor.gold_num, 100);
+        assert_eq!(actor.gold_num, 1_000_000);
+        assert_eq!(actor.cur_execution, 100_000);
 
-        // Attempting to spend 500 gold when server balance is 100 must fail
-        assert!(!actor.add_gold(-500));
-        assert_eq!(actor.gold_num, 100);
+        // Attempting to spend 2,000,000 gold when server balance is 1,000,000 must fail
+        assert!(!actor.add_gold(-2_000_000));
+        assert_eq!(actor.gold_num, 1_000_000);
         assert!(actor.take_dirty_delta().is_none());
 
         // Spending 40 gold succeeds and records a dirty Write-Behind delta
         assert!(actor.add_gold(-40));
-        assert_eq!(actor.gold_num, 60);
+        assert_eq!(actor.gold_num, 999_960);
 
         // Adding belly above UPPER_LIMIT_BELLY clamps at 10,000,000,000
         assert!(actor.add_belly(UPPER_LIMIT_BELLY + 5000));
@@ -182,7 +183,7 @@ mod tests {
 
         let delta = actor.take_dirty_delta().expect("expected dirty delta");
         assert_eq!(delta.uid, 20001);
-        assert_eq!(delta.updated_columns.get("gold_num"), Some(&60));
+        assert_eq!(delta.updated_columns.get("gold_num"), Some(&999_960));
         assert_eq!(
             delta.updated_columns.get("belly_num"),
             Some(&UPPER_LIMIT_BELLY)

@@ -106,16 +106,69 @@ pub fn dispatch_client_rpc(
             let utid = session.utid.unwrap_or(1);
             let master_hid = uid * 100 + 1;
             let master_htid = user::master_htid_for_utid(utid);
+            let hero_rows = store.select(
+                "t_hero",
+                &["level", "all_exp", "curr_hp"],
+                &[(
+                    "uid",
+                    crate::data::WhereCond::Eq(crate::data::ColumnValue::Int(uid as i64)),
+                )],
+                Some(1),
+            );
+            let (hlv, hexp, hhp) = hero_rows
+                .first()
+                .map(|r| {
+                    (
+                        r.get("level").and_then(|v| v.as_i64()).unwrap_or(1) as i32,
+                        r.get("all_exp").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+                        r.get("curr_hp").and_then(|v| v.as_i64()).unwrap_or(1000) as i32,
+                    )
+                })
+                .unwrap_or((1, 0, 1000));
             Amf3Value::assoc_map([(
                 master_hid.to_string(),
                 Amf3Value::assoc_map([
                     ("hid", Amf3Value::Integer(master_hid)),
                     ("htid", Amf3Value::Integer(master_htid)),
-                    ("level", Amf3Value::Integer(1)),
-                    ("exp", Amf3Value::Integer(0)),
-                    ("curr_hp", Amf3Value::Integer(1000)),
+                    ("level", Amf3Value::Integer(hlv)),
+                    ("exp", Amf3Value::Integer(hexp)),
+                    ("all_exp", Amf3Value::Integer(hexp)),
+                    ("curr_hp", Amf3Value::Integer(hhp)),
                 ]),
             )])
+        }
+        ("growupplan", "getInfo") => Amf3Value::Integer(-1),
+        ("boss", "getBossOffset") => Amf3Value::Integer(0),
+        ("charity", "getCharityInfo") => {
+            let uid = session.uid.unwrap_or(20001) as i32;
+            Amf3Value::assoc_map([
+                ("uid", Amf3Value::Integer(uid)),
+                ("prize_id", Amf3Value::Integer(0)),
+                ("salary_time", Amf3Value::Integer(0)),
+                ("prestige_salary_time", Amf3Value::Integer(0)),
+                (
+                    "va_charity_info",
+                    Amf3Value::assoc_map([("val_ret", Amf3Value::Integer(0))]),
+                ),
+            ])
+        }
+        ("elves", "get") => {
+            let uid = session.uid.unwrap_or(20001) as i32;
+            Amf3Value::assoc_map([
+                ("uid", Amf3Value::Integer(uid)),
+                ("model_level", Amf3Value::Integer(1)),
+                ("exp", Amf3Value::Integer(0)),
+                ("exp_compute_time", Amf3Value::Integer(now_i32)),
+                (
+                    "va_elves",
+                    Amf3Value::assoc_map([
+                        ("1", Amf3Value::Integer(0)),
+                        ("2", Amf3Value::Integer(0)),
+                        ("3", Amf3Value::Integer(0)),
+                        ("4", Amf3Value::Integer(0)),
+                    ]),
+                ),
+            ])
         }
         ("task", "getAllTask") => Amf3Value::assoc_map([
             ("accept", Amf3Value::dense_list([])),
