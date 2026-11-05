@@ -441,7 +441,7 @@ pub fn handle_http_stream_with_store(
             persist_path,
         ) {
             let mut hdr = format!(
-                "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n",
+                "HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store, no-cache, must-revalidate, max-age=0\r\nPragma: no-cache\r\nConnection: close\r\n",
                 portal_resp.status_line,
                 portal_resp.content_type,
                 portal_resp.body.len()
@@ -475,6 +475,18 @@ pub fn handle_http_stream_with_store(
     }
 
     let rel_path = clean_path.trim_start_matches('/');
+    if rel_path.to_ascii_lowercase().ends_with(".php") {
+        let body = b"Not Found";
+        let hdr = format!(
+            "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream.write_all(hdr.as_bytes())?;
+        if method != "HEAD" {
+            stream.write_all(body)?;
+        }
+        return stream.flush();
+    }
     let full_path = assets_root.join(rel_path);
     if !full_path.is_file() {
         let body = b"Not Found";
@@ -491,10 +503,16 @@ pub fn handle_http_stream_with_store(
 
     let content = std::fs::read(&full_path)?;
     let mime = mime_type_for_path(rel_path);
+    let cache_ctrl = if rel_path.starts_with("portal/") {
+        "no-store, no-cache, must-revalidate, max-age=0"
+    } else {
+        "public, max-age=3600"
+    };
     let hdr = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: public, max-age=3600\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: {}\r\nConnection: close\r\n\r\n",
         mime,
-        content.len()
+        content.len(),
+        cache_ctrl
     );
     stream.write_all(hdr.as_bytes())?;
     if method != "HEAD" {

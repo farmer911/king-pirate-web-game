@@ -1,4 +1,6 @@
 target/
+node_modules/
+web/node_modules/
 .env
 *.log
 *.pid

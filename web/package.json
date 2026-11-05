@@ -1,0 +1,9 @@
+{
+  "name": "king-pirate-web-portal",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "bun build ./src/main.tsx --outdir ../client-assets/portal --entry-naming app.js --minify && cp ./src/legacy.css ../client-assets/portal/legacy.css"
+  }
+}

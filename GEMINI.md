@@ -97,13 +97,13 @@ This document is the **Single Source of Truth (SSoT)** for the **King Pirate** p
 
 | Component | Technology | Path | Status |
 | :--- | :--- | :--- | :--- |
-| **Rust Server Crate & Wire Protocol** | **Rust 1.99 (`edition = "2024"`, `#![deny(dead_code)]`)** | `Cargo.toml`, `src/{main,protocol,amf3,crypt,actor,data,gateway,portal,btstore,battle}.rs`, `src/domain/*.rs`, `Dockerfile`, `docker-compose.yml` | ✅ Phase 1–6 Complete (`19/19` `cargo test` Pass) |
-| **Legacy Web Portal (`t9-rxhzw-web`)** | **Native Rust HTTP Portal (`src/portal.rs` + `src/gateway.rs`)** | `/`, `/index.php`, `/member.php`, `/core/Cx_Ajax.php`, `/app/sys/{reg,login,editpass,findpass}.php`, `/app/Game/{index,game}.php`, `/app/dh/{index,ajax}.php`, `/level.php`, `/fix.php` | ✅ 100% Ported & E2E Chrome Verified |
+| **Rust Server Crate & Wire Protocol** | **Rust 1.99 (`edition = "2024"`, `#![deny(dead_code)]`)** | `Cargo.toml`, `src/{main,protocol,amf3,crypt,actor,data,gateway,portal,btstore,battle}.rs`, `src/domain/*.rs`, `Dockerfile`, `docker-compose.yml` | ✅ Phase 1–7 Complete (`20/20` `cargo test` Pass) |
+| **React.js Legacy Web Portal (`t9-rxhzw-web`)** | **React 19 + TypeScript (`web/src/App.tsx` -> `client-assets/portal/`) + Rust API (`src/portal.rs`)** | `web/src/{App,main}.tsx`, `web/src/legacy.css`, `/api/{session,level,fix}`, `/core/Cx_Ajax.php`, `/app/dh/ajax.php` | ✅ 100% Legacy UI/UX Parity & Zero `.php` Downloads |
 | **Peak-Performance Actor + Hybrid Storage** | **In-Memory `PlayerSessionActor` (`~50 ns`) + Write-Behind SQLite (Mac Dev) / MariaDB (Linux Docker Prod)** | `REWRITE_PLAN.md` (Section 5–7), `docs/rewrite-plan.html` | ✅ Forensic Code & Security Verified |
 | **Forensic Investigation & Rust Plan** | **Markdown + Archify Interactive HTML** | `REWRITE_PLAN.md`, `.agents/STATE.md`, `docs/rewrite-plan.html` | ✅ 100% Ground-Truth Verified |
-| **Legacy Ground-Truth Corpus** | **PHP 5.5 + XML + DWARF C++ Headers + SQL Schema** | `legacy-ref/` | ✅ Extracted & Sanitized (`0` CJK chars) |
+| **Legacy Ground-Truth Corpus** | **PHP 5.5 + XML + DWARF C++ Headers + SQL Schema** | `legacy-ref/` (`legacy-ref/www/*.php`) | ✅ Extracted & Sanitized (`0` CJK chars) |
 | **Second Brain (Graphify + Obsidian)** | **NetworkX + Obsidian Markdown Vault** | `graphify-out/GRAPH_REPORT.md`, `graphify-out/obsidian/` | ✅ Initialized & Synced |
-| **Agent Rules (`always_on`)** | **8 Enforced Rules** | `.agents/rules/{01..05,07-evidence-based-truth-no-sycophancy,08-peak-performance-best-outcome,keep-up-to-date}.md` | ✅ Active (`always_on`) |
+| **Agent Rules (`always_on`)** | **9 Enforced Rules** | `.agents/rules/{01..05,07-evidence-based-truth-no-sycophancy,08-peak-performance-best-outcome,09-mandatory-planning-and-zero-fabrication-guardrail,keep-up-to-date}.md` | ✅ Active (`always_on`) |
 | **TDD Skills (`obra/superpowers`)** | **10 TDD Skills (100% English)** | `.agents/skills/{empirical-metrics-and-knowledge-tools,zero-defect-real-runtime-verification,engineering-audit-gate,simplify,porting-legacy-to-rust,updating-project-knowledge,planning-with-archify,test-driven-development,writing-skills,verification-before-completion}/SKILL.md` | ✅ Verified (`RED -> GREEN -> REFACTOR`) |
 
 ---
@@ -122,3 +122,7 @@ This document is the **Single Source of Truth (SSoT)** for the **King Pirate** p
   - *Where:* `src/actor.rs:72`, `src/domain/user.rs:244`, and `src/domain/mod.rs:140-175`.
   - *How & Why:* Used `cur_execution = 100` instead of `UserConf::INIT_EXECUTION = 100000` (`User.cfg.php:188`), failed to load `vip` and `cur_execution` in `rpc_user_character_login`, and returned generic `{}` for `growupplan.getInfo`, `charity.getCharityInfo`, and `elves.get` (causing 3 AS3 `TypeError: Error #1010` logs in Ruffle).
   - *Prevention:* Enforced `INIT_EXECUTION = 100_000` and `INIT_VIP = 9` in `src/actor.rs` and `src/domain/user.rs`, and implemented exact PHP ground-truth return payloads for `growupplan.getInfo` (`-1`), `charity.getCharityInfo` (`va_charity_info.val_ret`), and `elves.get` (`va_elves`).
+- **[2026-11-06] Browser Disk Cache Serving Stale `.php` Binary Downloads (`max-age=3600`) & Custom UI Fabrication:**
+  - *Where:* `src/gateway.rs:495` (`Cache-Control: public, max-age=3600` on static files when `client-assets/member.php` existed on disk) and `src/portal.rs` (custom dark-blue HTML UI instead of legacy `t9-rxhzw-web` UI/UX).
+  - *How & Why:* Before `src/portal.rs` intercepted `/member.php`, `src/gateway.rs` served `client-assets/member.php` (`10.9 KB`) as `application/octet-stream` with `max-age=3600`, causing the user's Chrome browser to cache `/member.php` as a downloadable file for 60 minutes. Furthermore, `src/portal.rs` invented a dark-blue UI instead of following `legacy-ref/www/{index,member,level,fix}.php`.
+  - *Prevention:* Moved all `.php` files out of `client-assets/` into `legacy-ref/www/`, added `test_mandatory_guardrail_and_zero_php_leak` in `src/protocol.rs`, sent `Clear-Site-Data: "cache"` + `Cache-Control: no-store` on portal routes, and migrated the legacy PHP portal to React.js (`web/src/App.tsx`) preserving 100% of the legacy Pintuer + `my.css` layout and Layer Modals.

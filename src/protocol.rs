@@ -240,4 +240,57 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_mandatory_guardrail_and_zero_php_leak() {
+        use std::fs;
+        use std::path::Path;
+
+        // 1. Verify Rule 09 guardrail exists and is always_on
+        let rule_09 = fs::read_to_string(
+            ".agents/rules/09-mandatory-planning-and-zero-fabrication-guardrail.md",
+        )
+        .expect("Rule 09 guardrail file must exist");
+        assert!(
+            rule_09.contains("trigger: always_on"),
+            "Rule 09 must have trigger: always_on"
+        );
+
+        // 2. Verify React.js web portal source (`web/src/App.tsx`) and built bundle exist
+        let react_app =
+            fs::read_to_string("web/src/App.tsx").expect("web/src/App.tsx React portal must exist");
+        for required_class in ["Cx_Nav", "DH_Panel", "User_Panel", "Main_Content"] {
+            assert!(
+                react_app.contains(required_class),
+                "web/src/App.tsx must preserve legacy layout class {}",
+                required_class
+            );
+        }
+        assert!(
+            Path::new("client-assets/portal/app.js").is_file(),
+            "Built React bundle client-assets/portal/app.js must exist"
+        );
+
+        // 3. Verify zero `.php` files exist inside `client-assets/` (prevents raw .php downloads)
+        fn assert_no_php_files(dir: &Path) {
+            if !dir.exists() {
+                return;
+            }
+            for entry in fs::read_dir(dir).expect("read_dir failed") {
+                let entry = entry.expect("entry failed");
+                let path = entry.path();
+                if path.is_dir() {
+                    assert_no_php_files(&path);
+                } else if let Some(ext) = path.extension() {
+                    assert_ne!(
+                        ext.to_string_lossy().to_ascii_lowercase(),
+                        "php",
+                        "Raw .php file found in client-assets/: {:?}",
+                        path
+                    );
+                }
+            }
+        }
+        assert_no_php_files(Path::new("client-assets"));
+    }
 }

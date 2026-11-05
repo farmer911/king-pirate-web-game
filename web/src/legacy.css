@@ -1,0 +1,503 @@
+/* Pintuer + Legacy my.css + Layer Modal Ground-Truth Stylesheet (legacy-ref/www) */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333;
+}
+
+body.body_2 {
+  background: #0d1624 url("/WebRes/img/bg.jpg") no-repeat center top fixed;
+  background-size: cover;
+  padding-bottom: 40px;
+}
+
+.main_bj {
+  width: 980px;
+  max-width: 96vw;
+  margin: 22px auto 0 auto;
+}
+
+/* Top Navigation: DH_Panel (Left Banner) + User_Panel (Right Account Box) */
+.Cx_Nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 14px;
+  min-height: 215px;
+  margin-bottom: 14px;
+}
+
+.DH_Panel {
+  flex: 1;
+  min-height: 215px;
+  border-radius: 6px;
+  border: 2px solid #0088cc;
+  background: linear-gradient(90deg, rgba(8, 20, 42, 0.72) 0%, rgba(8, 20, 42, 0.25) 60%, rgba(8, 20, 42, 0.1) 100%),
+    url("/WebRes/img/bg.jpg") no-repeat center center;
+  background-size: cover;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 18px 22px;
+}
+
+.DH_Panel_Badge {
+  display: inline-block;
+  background: rgba(230, 0, 18, 0.9);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  width: fit-content;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+
+.DH_Panel_Title {
+  color: #ffd700;
+  font-size: 26px;
+  font-weight: 800;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+  margin: 0;
+}
+
+.DH_Panel_Sub {
+  color: #f1f5f9;
+  font-size: 13px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+  margin: 4px 0 0 0;
+}
+
+.User_Panel {
+  width: 350px;
+  min-height: 215px;
+  border-radius: 6px;
+  padding: 16px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  border: 2px solid #38bdf8;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.bg-main {
+  background: linear-gradient(180deg, #0088cc 0%, #006699 100%) !important;
+  border-color: #0077b3 !important;
+  color: #fff !important;
+}
+
+.bg-inverse {
+  background: #222;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+
+.bg-yellow {
+  background: #f60 !important;
+  border-color: #f60 !important;
+  color: #fff !important;
+}
+
+.bg-red {
+  background: #e33 !important;
+  border-color: #e33 !important;
+  color: #fff !important;
+}
+
+.bg-blue {
+  background: #0ae !important;
+  border-color: #0ae !important;
+  color: #fff !important;
+}
+
+.bg-green {
+  background: #2c7 !important;
+  border-color: #2c7 !important;
+  color: #fff !important;
+}
+
+.text-white {
+  color: #fff !important;
+}
+
+.text-yellow {
+  color: #ffea00 !important;
+}
+
+.text-main {
+  color: #0088cc !important;
+}
+
+.text-red {
+  color: #e33 !important;
+}
+
+.text-small {
+  font-size: 12px;
+  color: #666;
+}
+
+.text-big {
+  font-size: 16px;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-left {
+  text-align: left;
+}
+
+.float-left {
+  float: left;
+}
+
+.float-right {
+  float: right;
+}
+
+.margin-right {
+  margin-right: 12px;
+}
+
+.margin-top {
+  margin-top: 10px;
+}
+
+.margin-bottom {
+  margin-bottom: 12px;
+}
+
+.margin-big {
+  margin: 10px 6px;
+}
+
+.padding {
+  padding: 12px;
+}
+
+.padding-left {
+  padding-left: 10px;
+}
+
+.padding-top {
+  padding-top: 10px;
+}
+
+.padding-bottom {
+  padding-bottom: 10px;
+}
+
+.radius-circle {
+  border-radius: 50%;
+}
+
+.border {
+  border: 1px solid #ddd;
+}
+
+.border-main {
+  border-color: #0088cc !important;
+}
+
+.W33 {
+  width: 33.3333%;
+}
+
+.user-top-row {
+  display: flex;
+  align-items: center;
+}
+
+.user-stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.35);
+  margin-top: 12px;
+  padding-top: 10px;
+  font-size: 12px;
+}
+
+.user-stats-row .text-big {
+  font-size: 13px;
+  display: block;
+}
+
+/* Main Content Box */
+#Main_Content {
+  background: rgba(255, 255, 255, 0.97);
+  border: 2px solid #0088cc;
+  border-radius: 6px;
+  padding: 18px 22px;
+  min-height: 360px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+#Main_Content h4 {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  color: #006699;
+}
+
+#Main_Content p {
+  margin: 8px 0;
+}
+
+/* Buttons */
+.button {
+  display: inline-block;
+  padding: 7px 15px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f5f5f5;
+  color: #333;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.button:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.button-little {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.button-block {
+  display: block;
+  width: 100%;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: baseline;
+  border-radius: 10px;
+  margin-left: 6px;
+}
+
+/* Tabs in member.php */
+.tab-head {
+  border-bottom: 2px solid #0088cc;
+  padding-bottom: 8px;
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.tab-head strong {
+  font-size: 16px;
+  color: #006699;
+}
+
+.tab-nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 6px;
+}
+
+.tab-nav li button {
+  border: 1px solid #0088cc;
+  background: #eef8ff;
+  color: #006699;
+  padding: 6px 14px;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.tab-nav li.active button {
+  background: #0088cc;
+  color: #fff;
+}
+
+/* 3-Column Grid (.line-big / .x4) */
+.line-big {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .Cx_Nav {
+    flex-direction: column;
+  }
+  .User_Panel {
+    width: 100%;
+  }
+  .line-big {
+    grid-template-columns: 1fr;
+  }
+}
+
+.member-card {
+  display: flex;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #bcdff1;
+  border-radius: 6px;
+  background: #f8fcff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.member-card:hover {
+  border-color: #0088cc;
+  background: #eef8ff;
+  box-shadow: 0 4px 12px rgba(0, 136, 204, 0.18);
+  transform: translateY(-2px);
+}
+
+/* Footer */
+#footer {
+  margin-top: 14px;
+  border-radius: 6px;
+  padding: 12px;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* Layer Modal Overlay (Matches layer.min.js / Pintuer modals) */
+.layer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.layer-modal {
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  max-width: 96vw;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid #0088cc;
+}
+
+.layer-header {
+  background: linear-gradient(180deg, #0088cc 0%, #006699 100%);
+  color: #fff;
+  padding: 10px 16px;
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.layer-close {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.layer-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+}
+
+/* Forms inside Modals */
+.form-group {
+  margin-bottom: 14px;
+}
+
+.form-group .label {
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: #0088cc;
+  box-shadow: 0 0 0 2px rgba(0, 136, 204, 0.18);
+}
+
+.button-group.radio {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.button-group.radio label.button {
+  background: #eef8ff;
+  border: 1px solid #0088cc;
+  color: #006699;
+}
+
+.button-group.radio label.button.active {
+  background: #0088cc;
+  color: #fff;
+}
+
+/* Toast Notification */
+.portal-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  padding: 12px 20px;
+  border-radius: 6px;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
