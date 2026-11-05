@@ -38,6 +38,7 @@ Before writing any function, struct, or constant, check this table. If it alread
 | **RPC Gateway** | `src/gateway.rs` | `FLASH_POLICY_REQUEST`, `FLASH_POLICY_RESPONSE`, `ConnectionSession`, `MethodAccessTier`, `classify_method`, `authorize_rpc_call`, `encode_framed_packet`, `decode_framed_packet` | `game20002.xml:39-100`, `RPCFramework.class.php:348-404, 783-865`, `Framework.cfg.php:203-411` |
 | **Static Game Store** | `src/btstore.rs` | `RawSkill`, `RawBuffer`, `RawTarget`, `StaticBtstore::{new_baseline,load_skills_csv,get_skill,get_buffer,get_target}` | `battle-dwarf-clean.hpp:243-244, 318`, `skill.csv`, `buffer.csv`, `target.csv` |
 | **Combat Engine** | `src/battle.rs` | `HeroUnit`, `FormationGrid`, `ReactionRecord`, `ActionRecord`, `BattleResult::{to_amf3}`, `compute_skill_damage`, `execute_battle_do_hero` | `battle-dwarf-clean.hpp:1-386`, `Battle.class.php:81-93, 128-134` |
+| **Bounded Domains** | `src/domain/*.rs` | `DomainContext`, `dispatch_domain_rpc`, `user::*`, `hero::*`, `bag::*`, `forge::*`, `copy::*`, `arena::*`, `boss::*`, `guild::*`, `town::*`, `pet::*`, `economy::*` | `Framework.cfg.php:279-411`, `User.class.php:47-650` |
 | **Entrypoint** | `src/main.rs` | Binary bootstrap & compile-time lint gate (`#![deny(dead_code, unused_imports, unused_variables)]`) | `start_all.sh` |
 
 ## Mandatory 5-Step Porting Workflow

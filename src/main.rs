@@ -6,6 +6,7 @@ pub mod battle;
 pub mod btstore;
 pub mod crypt;
 pub mod data;
+pub mod domain;
 pub mod gateway;
 pub mod protocol;
 
