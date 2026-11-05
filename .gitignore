@@ -1,0 +1,16 @@
+target/
+.env
+*.log
+*.pid
+.DS_Store
+
+# Local-only plans, Archify HTML, Second Brain, and legacy reference corpus (NEVER push to Git)
+REWRITE_PLAN.md
+docs/
+.archify/
+.agents/STATE.md
+graphify-out/
+legacy-ref/
+data/*.db
+data/*.db-shm
+data/*.db-wal

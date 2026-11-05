@@ -1,0 +1,10 @@
+[package]
+name = "king-pirate"
+version = "0.1.0"
+edition = "2024"
+description = "Vua Hai Tac 2025 (BabelTime v298) — Single-Binary 100% Rust Server"
+
+[lints.rust]
+dead_code = "deny"
+unused_imports = "deny"
+unused_variables = "deny"
