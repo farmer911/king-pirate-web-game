@@ -24,10 +24,11 @@ This document is the **Single Source of Truth (SSoT)** for the **King Pirate** p
 
 ## 2. MANDATORY RULE #2: Second Brain (`Graphify + Obsidian`) & Token Optimization (`RTK`)
 
-1. **Query Knowledge Graph (`Graphify`) & Obsidian Vault Before Reading Raw Files:**
+1. **Query Knowledge Graph (`Graphify MCP`) & Obsidian Vault Before Reading Raw Files:**
+   - **Graphify MCP Server (`ServerName: "graphify"`):** Always call `query_graph`, `get_node`, or `get_neighbors` first to get exact `src=... loc=L...` coordinates and `[calls]` edges.
    - Knowledge Graph report: `graphify-out/GRAPH_REPORT.md` and `graphify-out/graph.json`.
    - Obsidian Second Brain Vault: `graphify-out/obsidian/` (open directly in **Obsidian.app** for interactive Graph View with `[[wikilinks]]` and `#community/...` tags).
-   - **Mandatory Lookup Sequence:** Read `.agents/STATE.md` and `graphify-out/GRAPH_REPORT.md` first -> locate the exact target file and symbol -> read only the required line range (`StartLine`..`EndLine`).
+   - **Mandatory Lookup Sequence:** Read `.agents/STATE.md` -> call `graphify` MCP (`query_graph` / `get_node` / `get_neighbors`) -> read only the required line range (`StartLine`..`EndLine`, `<= 120` lines).
 2. **Compress CLI Output with `rtk`:**
    - Always prefer `rtk ls`, `rtk git status`, `rtk git diff`, `rtk cargo check`, `rtk cargo test` over raw shell commands.
 3. **Git Safety:**
@@ -87,9 +88,9 @@ This document is the **Single Source of Truth (SSoT)** for the **King Pirate** p
 1. **Supreme Priority (`Peak Performance & Engineering Excellence > Implementation Time > File Count`):**
    - Implementation time and minimizing file count are **NOT** constraints. Always propose and build the highest-performance, lowest-latency (`p99`), and most scalable architecture.
 2. **Proactive Architecture Upgrade Mandate:**
-   - **In-Memory Player Actor (`PlayerSessionActor` per `uid`) + Write-Behind Batch Persistence:** Keep hot player state (`User`, `Hero`, `Bag`, `Formation`, `Task`) in L1/L2 RAM (`~20–50 ns` access) and flush dirty diffs (`userModify`) asynchronously in batched transactions to MariaDB/PostgreSQL (Online Docker) or SQLite WAL (macOS Local Dev).
+   - **In-Memory Player Actor (`PlayerSessionActor` per `uid`) + Write-Behind Persistence:** Keep hot player state (`User`, `Hero`, `Bag`, `Formation`, `Task`) in process RAM and flush dirty diffs (`userModify`) via `DataStore::apply_write_behind_delta` and AMF3 snapshot persistence (`data/pirate_store.amf3`).
    - **Compile-Time / Zero-Allocation `#[repr(C)]` Static Store:** Convert `btstore` and `battle/data/*.csv` into contiguous `#[repr(C)]` tables with `O(1)` array index lookup (`0` runtime heap allocations).
-   - **100% Pure Native Rust Completion:** Port all active game domains into `src/domain/*.rs` with zero legacy PHP fallback remaining in production.
+   - **100% Pure Native Rust Completion:** Port all active game domains into `src/domain/*.rs` wired directly into production `dispatch_client_rpc` with zero legacy PHP fallback remaining in production.
 
 ---
 
@@ -97,14 +98,14 @@ This document is the **Single Source of Truth (SSoT)** for the **King Pirate** p
 
 | Component | Technology | Path | Status |
 | :--- | :--- | :--- | :--- |
-| **Rust Server Crate & Wire Protocol** | **Rust 1.99 (`edition = "2024"`, `#![deny(dead_code)]`)** | `Cargo.toml`, `src/{main,protocol,amf3,crypt,actor,data,gateway,portal,btstore,battle}.rs`, `src/domain/*.rs`, `Dockerfile`, `docker-compose.yml` | ✅ Phase 1–7 Complete (`20/20` `cargo test` Pass) |
-| **React.js Legacy Web Portal (`t9-rxhzw-web`)** | **React 19 + TypeScript (`web/src/App.tsx` -> `client-assets/portal/`) + Rust API (`src/portal.rs`)** | `web/src/{App,main}.tsx`, `web/src/legacy.css`, `/api/{session,level,fix}`, `/core/Cx_Ajax.php`, `/app/dh/ajax.php` | ✅ 100% Legacy UI/UX Parity & Zero `.php` Downloads |
-| **Peak-Performance Actor + Hybrid Storage** | **In-Memory `PlayerSessionActor` (`~50 ns`) + Write-Behind SQLite (Mac Dev) / MariaDB (Linux Docker Prod)** | `REWRITE_PLAN.md` (Section 5–7), `docs/rewrite-plan.html` | ✅ Forensic Code & Security Verified |
+| **Rust Server Crate & Wire Protocol** | **Rust 1.99 (`edition = "2024"`, `#![deny(dead_code)]`, `0` external crates)** | `Cargo.toml`, `src/{main,protocol,amf3,crypt,actor,data,gateway,portal,btstore,battle}.rs`, `src/domain/*.rs`, `Dockerfile`, `docker-compose.yml` | ✅ Phase 1–8 Complete (`21/21` `cargo test` Pass) |
+| **React.js SPA Unified Shell (`t9-rxhzw-web` Option B)** | **React 19 + TypeScript (`web/src/App.tsx` -> `client-assets/portal/`) + Persistent Ruffle Overlay + Rust API (`src/portal.rs`)** | `web/src/{App,main}.tsx`, `web/src/legacy.css`, `/api/{session,level,fix}`, `/core/Cx_Ajax.php`, `/app/dh/ajax.php` | ✅ 100% Legacy UI/UX Parity, Persistent Game Overlay & Zero `.php` Downloads |
+| **In-Memory Actor + Snapshot Storage** | **In-Memory `PlayerSessionActor` + `RwLock<BTreeMap>` `DataStore` (`data/pirate_store.amf3`)** | `REWRITE_PLAN.md` (Section 5–7), `docs/rewrite-plan.html` | ✅ Forensic Code & Security Verified |
 | **Forensic Investigation & Rust Plan** | **Markdown + Archify Interactive HTML** | `REWRITE_PLAN.md`, `.agents/STATE.md`, `docs/rewrite-plan.html` | ✅ 100% Ground-Truth Verified |
 | **Legacy Ground-Truth Corpus** | **PHP 5.5 + XML + DWARF C++ Headers + SQL Schema** | `legacy-ref/` (`legacy-ref/www/*.php`) | ✅ Extracted & Sanitized (`0` CJK chars) |
-| **Second Brain (Graphify + Obsidian)** | **NetworkX + Obsidian Markdown Vault** | `graphify-out/GRAPH_REPORT.md`, `graphify-out/obsidian/` | ✅ Initialized & Synced |
+| **Second Brain (Graphify MCP + Obsidian)** | **NetworkX + Obsidian Markdown Vault + Graphify MCP** | `graphify-out/GRAPH_REPORT.md`, `graphify-out/obsidian/` | ✅ Initialized & Synced |
 | **Agent Rules (`always_on`)** | **9 Enforced Rules** | `.agents/rules/{01..05,07-evidence-based-truth-no-sycophancy,08-peak-performance-best-outcome,09-mandatory-planning-and-zero-fabrication-guardrail,keep-up-to-date}.md` | ✅ Active (`always_on`) |
-| **TDD Skills (`obra/superpowers`)** | **10 TDD Skills (100% English)** | `.agents/skills/{empirical-metrics-and-knowledge-tools,zero-defect-real-runtime-verification,engineering-audit-gate,simplify,porting-legacy-to-rust,updating-project-knowledge,planning-with-archify,test-driven-development,writing-skills,verification-before-completion}/SKILL.md` | ✅ Verified (`RED -> GREEN -> REFACTOR`) |
+| **TDD Skills (`obra/superpowers`)** | **11 TDD Skills (100% English, including `honesty`)** | `.agents/skills/{honesty,empirical-metrics-and-knowledge-tools,zero-defect-real-runtime-verification,engineering-audit-gate,simplify,porting-legacy-to-rust,updating-project-knowledge,planning-with-archify,test-driven-development,writing-skills,verification-before-completion}/SKILL.md` | ✅ Verified (`RED -> GREEN -> REFACTOR`) |
 
 ---
 

@@ -3,50 +3,49 @@ name: engineering-audit-gate
 description: Use when starting, reviewing, refactoring, or completing any coding, architectural, or asset task, before writing new code or claiming completion.
 ---
 
-# Engineering Audit Gate (Reuse, Dead-Code Purge, Optimize, Propose Better)
+# Engineering Audit Gate (Reuse, Dead-Code Purge, Optimize, Propose Better Options)
 
 ## Overview
 
-Every task must pass a strict **4-gate engineering audit** to guarantee zero reinvented wheels, zero dead code or junk files, maximum empirical optimization, and proactive architectural upgrades.
+Every task must pass a strict **4-gate engineering audit** to guarantee zero reinvented wheels, zero dead code or junk files (including test-only dead-code bypasses), maximum empirical optimization, and proactive multi-option architectural proposals (`Gate 4`).
 
 **Core principle:** Violating the letter of these rules is violating the spirit of these rules.
 
-**REQUIRED SUB-SKILL:** Use `simplify` and `verification-before-completion`.
+**REQUIRED SUB-SKILL:** Use `honesty`, `simplify`, and `verification-before-completion`.
 
 ## The 4 Mandatory Gates
 
 ```
 1. GATE 1 — ALREADY EXISTS? -> REUSE IT:
-   Check the Shared Primitives Registry (porting-legacy-to-rust/SKILL.md), Rust stdlib, and existing modules first. If a struct, helper, or asset already exists, reuse it. Never write duplicate code.
+   Query Graphify MCP (query_graph / get_node) and check the Shared Primitives Registry (porting-legacy-to-rust/SKILL.md) first. If a struct, helper, or asset already exists, reuse it. Never write duplicate code.
 
-2. GATE 2 — DEAD CODE OR JUNK FILES? -> DELETE IMMEDIATELY:
-   Enforce #![deny(dead_code, unused_imports, unused_variables)] in Rust and actively delete unused functions, hollow wrappers, backup files (.bak, .swf--, .20200624), authoring sources (.fla), OS artifacts (Thumbs.db), and unreferenced assets.
+2. GATE 2 — DEAD CODE, TEST-ONLY STUBS OR JUNK FILES? -> DELETE OR WIRE IMMEDIATELY:
+   Enforce #![deny(dead_code, unused_imports, unused_variables)] honestly: never call a domain function only inside #[cfg(test)] to silence rustc while leaving production dispatch_client_rpc returning []. Actively delete all backup/junk files (.orig, .bak, .bk, .1, .jsfl, .2017*-.2020*, .php in client-assets/).
 
-3. GATE 3 — CAN IT BE OPTIMIZED FURTHER? -> BENCHMARK & OPTIMIZE:
-   Inspect memory layout, algorithmic complexity, and payload size. Prefer O(1) #[repr(C)] lookups over hash maps, L1/L2 RAM actors over synchronous network I/O, and compressed formats (CWS/ZWS/Zstd) over raw bytes.
+3. GATE 3 — CAN IT BE OPTIMIZED FURTHER? -> MEASURE & OPTIMIZE:
+   Inspect memory layout, algorithmic complexity, and payload size using real shell commands (wc -l, du -sh, /usr/bin/time -p). Prefer O(1) #[repr(C)] lookups over hash maps and persistent SPA state over full-page reloads.
 
-4. GATE 4 — IS THERE A BETTER SOLUTION? -> PROPOSE WITH CODE & METRICS:
-   Never settle for a suboptimal design just because it is faster to type. Always evaluate and propose the highest-performance, lowest-latency, most secure solution backed by file:line citations and measured metrics (Rule 07 & Rule 08).
+4. GATE 4 — IS THERE A BETTER SOLUTION? -> PROPOSE 2-3 CONCRETE OPTIONS WITH TRADE-OFFS:
+   Before executing architectural changes, ALWAYS present 2-3 concrete options (with code citations, measured asset/LOC metrics, and explicit pros/cons) so the user can choose the best direction.
 ```
 
 ## Mandatory Pre-Completion Audit Checklist
 
-Before finishing any task, verify all 4 gates:
-- [ ] **Reuse Check:** Did I check `porting-legacy-to-rust/SKILL.md` and register any new reusable primitive?
-- [ ] **Dead Code Purge:** Does `cargo check && cargo test` pass with zero dead code, and are all backup/junk files removed?
-- [ ] **Optimization Check:** Are hot paths zero-allocation / `O(1)` and are static/client assets compressed?
-- [ ] **Better Solution Proposal:** Did I surface any superior architectural or performance upgrade with measured evidence?
+- [ ] **Reuse Check:** Did I query `graphify` MCP and check `porting-legacy-to-rust/SKILL.md`?
+- [ ] **Honest Dead-Code & Junk Purge:** Are all 11 domains wired into live production `dispatch_client_rpc`, and does `client-assets/` have `0` `.orig`/`.bk`/`.jsfl`/`.20*` backup files?
+- [ ] **Optimization Check:** Are hot paths zero-allocation / `O(1)` and verified with real commands?
+- [ ] **Better Solution Proposal (`Gate 4`):** Did I propose clear architectural options with trade-offs instead of silently coding without alignment?
 
 ## Rationalization Table
 
 | Excuse | Reality |
 | :--- | :--- |
-| "Writing a small helper locally is faster than checking `porting-legacy-to-rust/SKILL.md`" | Duplicate helpers create drift and bloat. Always check and reuse the Shared Primitives Registry. |
-| "Leaving `.fla` or `.bak` files in `client-assets/` doesn't hurt runtime" | Junk files waste disk space and pollute directory scans. Delete them immediately. |
-| "The user didn't ask if there is a better solution" | Rule 08 and Gate 4 require proactively proposing superior solutions with empirical metrics on every task. |
+| "Calling a domain function inside `#[test]` makes `cargo check` pass with `dead_code = \"deny\"`" | That is a deceptive test-only stub. Every domain function must be wired into the live server router (`dispatch_client_rpc`). |
+| "Leaving `.orig`, `.bk`, or `.20200804` files in `client-assets/` doesn't affect runtime" | Junk files violate Gate 2 and fail `test_honesty_no_fake_metrics_no_test_only_domains_no_junk`. Delete them immediately. |
+| "I'll just pick one design and code it immediately without proposing options" | Gate 4 requires presenting concrete architectural options with measured trade-offs when planning or redesigning. |
 
 ## Red Flags - STOP and Fix
 
-- Writing a new function without checking if `src/{protocol,amf3,crypt,actor,data,gateway,btstore,battle}.rs` already provides it.
-- Leaving any dead code, unused import, or `.bak`/`.fla`/`Thumbs.db` file on disk.
-- Proposing an optimization without measuring actual byte/latency savings first.
+- Writing any function in `src/domain/*.rs` that is not wired into production `dispatch_client_rpc`.
+- Leaving any `.orig`, `.bk`, `.bak`, `.jsfl`, `.1`, or `.2017*–.2020*` file in `client-assets/`.
+- Executing a major architectural change without presenting Gate 4 options first.

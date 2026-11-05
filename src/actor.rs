@@ -7,7 +7,7 @@
 //!     `prestige_num` (`>= 0`), `blood_package` (`>= 0`), and `fight_cdtime`.
 //! - `legacy-ref/rpcfw/module/user/User.class.php` (`L1573-L1576`):
 //!   - Guarantees a single active connection per `uid` (`closeConnection` on duplicate login),
-//!     allowing lock-free L1/L2 CPU cache reads and mutations (`~20-50 ns`) inside `PlayerSessionActor`.
+//!     allowing lock-free in-memory reads and mutations inside `PlayerSessionActor`.
 
 use std::collections::BTreeMap;
 
@@ -21,7 +21,7 @@ pub struct PlayerDirtyDelta {
     pub updated_columns: BTreeMap<&'static str, i64>,
 }
 
-/// Hot in-memory state for an online player (`uid`), residing in L1/L2 RAM (`~20-50 ns` access).
+/// Hot in-memory state for an online player (`uid`), residing in process RAM.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlayerSessionActor {
     pub uid: u32,

@@ -17,6 +17,8 @@ pub mod user;
 
 use crate::actor::PlayerSessionActor;
 use crate::amf3::Amf3Value;
+use crate::battle::{FormationGrid, HeroUnit};
+use crate::btstore::StaticBtstore;
 use crate::data::DataStore;
 use crate::gateway::{ConnectionSession, authorize_rpc_call, encode_babeltime_response};
 use std::path::Path;
@@ -202,11 +204,244 @@ pub fn dispatch_client_rpc(
             }
         }
         ("city" | "town", "enterTownList" | "getEnterTownList") => {
+            let (_ux, _uy) = town::unpack_town_xy((19 << 16) | 25);
             Amf3Value::dense_list([Amf3Value::Integer(1)])
         }
         ("city" | "town", "leaveTown") => Amf3Value::String("ok".to_string()),
+        ("user", "buyExecution") => {
+            let num = args.first().and_then(|v| v.as_i64()).unwrap_or(10) as i32;
+            if let Some(actor) = actor_slot.as_mut() {
+                user::rpc_buy_execution(actor, num, (num.max(1) as i64) * 2)
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("bag", "openGrid") => {
+            let slots = args.first().and_then(|v| v.as_i64()).unwrap_or(1) as u16;
+            let mut pbag = bag::PlayerBag::new(24);
+            if let Some(actor) = actor_slot.as_mut() {
+                if pbag.open_grid_by_gold(actor, slots, 10) {
+                    pbag.to_amf3()
+                } else {
+                    Amf3Value::String("no_gold".to_string())
+                }
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("bag", "receiveItem" | "addItems") => {
+            let tmpl_id = args.first().and_then(|v| v.as_i64()).unwrap_or(10001) as u32;
+            let count = args.get(1).and_then(|v| v.as_i64()).unwrap_or(1) as u32;
+            let mut pbag = bag::PlayerBag::new(24);
+            let _ = pbag.add_item(store, tmpl_id, count);
+            pbag.to_amf3()
+        }
+        ("forge", "reinforce") => {
+            let item_id = args.first().and_then(|v| v.as_i64()).unwrap_or(1000001) as u64;
+            let cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(200);
+            if let Some(actor) = actor_slot.as_mut() {
+                let mut item = bag::BagItem {
+                    item_id,
+                    item_template_id: 10001,
+                    item_num: 1,
+                    reinforce_level: 0,
+                };
+                forge::reinforce_item(actor, &mut item, cost)
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("hero", "recruit" | "addPrestigeHero") => {
+            let htid = args.first().and_then(|v| v.as_i64()).unwrap_or(101) as u32;
+            let cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(10);
+            if let Some(actor) = actor_slot.as_mut() {
+                match hero::recruit_hero(actor, store, htid, cost) {
+                    Ok(rec) => rec.to_amf3(),
+                    Err(e) => Amf3Value::String(e.to_string()),
+                }
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("hero", "addGoodwillByGold") => {
+            let htid = args.first().and_then(|v| v.as_i64()).unwrap_or(101) as u32;
+            let gold_cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(5);
+            if let Some(actor) = actor_slot.as_mut() {
+                let mut rec = hero::HeroRecord {
+                    hid: actor.master_hid,
+                    uid: actor.uid,
+                    htid,
+                    level: actor.level,
+                    exp: 0,
+                    goodwill_level: 1,
+                    transfer_num: 0,
+                    haki_level: 0,
+                    astrolabe_level: 0,
+                };
+                if hero::add_goodwill_by_gold(actor, &mut rec, gold_cost) {
+                    rec.to_amf3()
+                } else {
+                    Amf3Value::String("no_gold".to_string())
+                }
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("haki", "trial" | "allGoldTrial") => {
+            let belly_cost = args.first().and_then(|v| v.as_i64()).unwrap_or(100);
+            if let Some(actor) = actor_slot.as_mut() {
+                let mut rec = hero::HeroRecord {
+                    hid: actor.master_hid,
+                    uid: actor.uid,
+                    htid: 101,
+                    level: actor.level,
+                    exp: 0,
+                    goodwill_level: 1,
+                    transfer_num: 0,
+                    haki_level: 0,
+                    astrolabe_level: 0,
+                };
+                if hero::upgrade_haki_by_belly(actor, &mut rec, belly_cost) {
+                    rec.to_amf3()
+                } else {
+                    Amf3Value::String("no_belly".to_string())
+                }
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("copy" | "elitecopy" | "herocopy", "attack") => {
+            let army_id = args.first().and_then(|v| v.as_i64()).unwrap_or(1001) as u32;
+            let enemy_lv = args.get(1).and_then(|v| v.as_i64()).unwrap_or(1).max(1) as u16;
+            if let Some(actor) = actor_slot.as_mut() {
+                let btstore = StaticBtstore::new_baseline();
+                let hero_rec = hero::HeroRecord {
+                    hid: actor.master_hid,
+                    uid: actor.uid,
+                    htid: user::master_htid_for_utid(actor.utid) as u32,
+                    level: actor.level.max(10),
+                    exp: 0,
+                    goodwill_level: 1,
+                    transfer_num: 1,
+                    haki_level: 1,
+                    astrolabe_level: 1,
+                };
+                let mut p_grid = FormationGrid::new(actor.uid, actor.cur_formation);
+                p_grid.set_hero(0, hero_rec.to_battle_unit(0));
+                copy::attack_copy_enemy(actor, p_grid, army_id, enemy_lv, &btstore)
+                    .unwrap_or_else(|e| Amf3Value::String(e.to_string()))
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("arena" | "olympic", "challenge") => {
+            let opp_uid = args.first().and_then(|v| v.as_i64()).unwrap_or(20002) as u32;
+            if let Some(actor) = actor_slot.as_mut() {
+                let btstore = StaticBtstore::new_baseline();
+                let mut p_grid = FormationGrid::new(actor.uid, actor.cur_formation);
+                p_grid.set_hero(
+                    0,
+                    HeroUnit::new_basic(actor.master_hid, 1, 0, actor.level.max(10), 1500, 400, 120),
+                );
+                let mut d_grid = FormationGrid::new(opp_uid, 10002);
+                d_grid.set_hero(0, HeroUnit::new_basic(opp_uid * 100 + 1, 2, 0, 2, 500, 100, 40));
+                let mut my_pos = 50u32;
+                let mut opp_pos = 10u32;
+                arena::challenge_arena_opponent(
+                    actor,
+                    p_grid,
+                    d_grid,
+                    &mut my_pos,
+                    &mut opp_pos,
+                    now_unix,
+                    &btstore,
+                )
+                .unwrap_or_else(|e| Amf3Value::String(e.to_string()))
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("boss" | "guildboss" | "randomboss", "attack" | "attackBoss") => {
+            let boss_id = args.first().and_then(|v| v.as_i64()).unwrap_or(1) as u32;
+            let dmg = args.get(1).and_then(|v| v.as_i64()).unwrap_or(2500);
+            if let Some(actor) = actor_slot.as_mut() {
+                let mut boss_state = boss::WorldBossState::new(boss_id, 50, 10000);
+                boss_state.attack_boss(actor, dmg)
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("guild", "create") => {
+            let gname = args.first().and_then(|v| v.as_str()).unwrap_or("StrawHat");
+            if let Some(actor) = actor_slot.as_mut() {
+                match guild::create_guild(actor, store, gname, 500) {
+                    Ok(g) => Amf3Value::assoc_map([
+                        ("ret", Amf3Value::String("ok".to_string())),
+                        ("guild_id", Amf3Value::Integer(g.guild_id as i32)),
+                        ("name", Amf3Value::String(g.name)),
+                    ]),
+                    Err(e) => Amf3Value::String(e.to_string()),
+                }
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("guild", "contributeBelly" | "contributeGold") => {
+            let amount = args.first().and_then(|v| v.as_i64()).unwrap_or(200);
+            if let Some(actor) = actor_slot.as_mut() {
+                let mut g = guild::GuildRecord {
+                    guild_id: actor.guild_id.max(1),
+                    name: "StrawHat".to_string(),
+                    president_uid: actor.uid,
+                    level: 1,
+                    exp: 0,
+                };
+                guild::contribute_belly(actor, &mut g, amount)
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("pet" | "copet" | "riding", "train" | "feedingOnce") => {
+            let exp_gain = args.first().and_then(|v| v.as_i64()).unwrap_or(150) as u32;
+            let belly_cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(100);
+            if let Some(actor) = actor_slot.as_mut() {
+                let mut pet_rec = pet::PetRecord {
+                    pet_id: 1,
+                    pet_tmpl_id: 1,
+                    level: 1,
+                    exp: 0,
+                    evolved: false,
+                };
+                pet::train_pet(actor, &mut pet_rec, exp_gain, belly_cost)
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("kitchen", "cook") => {
+            if let Some(actor) = actor_slot.as_mut() {
+                economy::kitchen_cook(actor, 300)
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
+        ("reward" | "active", "dailySign" | "fetchPrize") => {
+            if let Some(actor) = actor_slot.as_mut() {
+                economy::daily_sign_reward(actor, 50, 2000)
+            } else {
+                Amf3Value::String("err".to_string())
+            }
+        }
         _ => Amf3Value::dense_list([]),
     };
+
+    if let Some(actor) = actor_slot.as_mut() {
+        if let Some(delta) = actor.take_dirty_delta() {
+            store.apply_write_behind_delta(&delta);
+            if let Some(p) = persist_path {
+                let _ = store.save_to_disk(p);
+            }
+        }
+    }
 
     Ok(encode_babeltime_response(req_val, "ok", ret_val, now_i32))
 }

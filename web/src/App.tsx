@@ -49,6 +49,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<"game" | "yl" | "tools">("game");
   const [modal, setModal] = useState<ModalType>(null);
   const [playingServerFq, setPlayingServerFq] = useState<string | null>(null);
+  const [spaPortalDrawerOpen, setSpaPortalDrawerOpen] = useState<boolean>(false);
   const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
 
   // Auth form states (matching app/sys/{login,reg,editpass,findpass}.php)
@@ -354,84 +355,155 @@ export function App() {
     showToast(data.info, data.status === "y");
   };
 
-  // Fullscreen Game View (/app/Game/game.php?FQ=1)
-  if (playingServerFq) {
-    const sid = session.id || 202621270;
-    return (
-      <div style={{ width: "100vw", height: "100vh", background: "#000", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div
-          style={{
-            height: "36px",
-            background: "linear-gradient(90deg, #004d73 0%, #0088cc 100%)",
-            color: "#fff",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 16px",
-            fontSize: "13px",
-            borderBottom: "1px solid #38bdf8",
-          }}
-        >
-          <div>
-            <strong>[S{playingServerFq}.LouLx-Game] VUA HẢI TẶC</strong>
-            {session.accountName ? ` — Tài khoản: ${session.accountName} (SID: ${sid})` : ""}
-          </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button
-              className="button button-little bg-yellow"
-              onClick={() => {
-                setPlayingServerFq(null);
-                window.history.pushState({}, "", "/member.php");
-                fetchSession();
-              }}
-            >
-              Trung tâm thành viên
-            </button>
-            <button
-              className="button button-little bg-blue"
-              onClick={() => {
-                setPlayingServerFq(null);
-                setModal("dh_exchange");
-                window.history.pushState({}, "", "/member.php");
-              }}
-            >
-              Đổi Vàng
-            </button>
-            <button
-              className="button button-little bg-green"
-              onClick={() => {
-                setPlayingServerFq(null);
-                setModal("level_tool");
-                window.history.pushState({}, "", "/member.php");
-              }}
-            >
-              Cập nhật Level
-            </button>
-          </div>
-        </div>
-        <iframe
-          id="Main_Game"
-          title="VUA HẢI TẶC"
-          src={`/T9NuoYa/T9NuoYa.html?sid=${sid}`}
-          style={{ flex: 1, width: "100%", border: "none" }}
-          allowFullScreen
-        />
-      </div>
-    );
-  }
+  const sid = session.id || 202621270;
 
   return (
     <div className="main_bj">
       {toast && (
         <div
           className="portal-toast"
-          style={{ background: toast.ok ? "#16a34a" : "#dc2626" }}
+          style={{ background: toast.ok ? "#16a34a" : "#dc2626", zIndex: 20000 }}
         >
           {toast.text}
         </div>
       )}
 
+      {/* Option B: Persistent Ruffle Game Canvas + Floating SPA HUD Overlay (/app/Game/game.php?FQ=1) */}
+      {playingServerFq && (
+        <div
+          id="spa-game-shell"
+          style={{
+            position: "fixed",
+            inset: 0,
+            width: "100vw",
+            height: "100vh",
+            background: "#000",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            zIndex: 5000,
+          }}
+        >
+          <div
+            id="spa-game-hud-bar"
+            style={{
+              height: "40px",
+              background: "linear-gradient(90deg, #003b5c 0%, #0088cc 100%)",
+              color: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "0 16px",
+              fontSize: "13px",
+              borderBottom: "1px solid #38bdf8",
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <strong>[S{playingServerFq}.LouLx-Game] VUA HẢI TẶC 2023 (SPA)</strong>
+              {session.accountName && (
+                <span>
+                  Tài khoản: <strong style={{ color: "#fde047" }}>{session.accountName}</strong> (SID:{" "}
+                  {sid} • Điểm DJ: <strong style={{ color: "#fde047" }}>{session.dj.toLocaleString()}</strong>)
+                </span>
+              )}
+              {session.characters.length > 0 && (
+                <span style={{ background: "rgba(0,0,0,0.35)", padding: "2px 8px", borderRadius: "4px" }}>
+                  Nhân vật: <strong>{session.characters[0].uname}</strong> (Lv.{session.characters[0].level} • VIP{" "}
+                  {session.characters[0].vip} • Vàng: {session.characters[0].gold_num.toLocaleString()})
+                </span>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <button
+                id="btn-hud-member-drawer"
+                className="button button-little bg-yellow"
+                onClick={() => {
+                  setSpaPortalDrawerOpen((prev) => !prev);
+                  fetchSession();
+                }}
+              >
+                {spaPortalDrawerOpen ? "Đóng Bảng Thành Viên" : "Trung tâm thành viên (Overlay)"}
+              </button>
+              <button
+                id="btn-hud-dh"
+                className="button button-little bg-blue"
+                onClick={() => {
+                  setModal("dh_exchange");
+                  handleSelectExchangeServer(playingServerFq);
+                }}
+              >
+                Đổi Vàng
+              </button>
+              <button
+                id="btn-hud-level"
+                className="button button-little bg-green"
+                onClick={() => {
+                  fetchSession();
+                  setModal("level_tool");
+                }}
+              >
+                Cập nhật Level
+              </button>
+              <button
+                id="btn-hud-fix"
+                className="button button-little bg-sub"
+                onClick={() => {
+                  fetchSession();
+                  setModal("fix_tool");
+                }}
+              >
+                Sửa lỗi Nhân vật &amp; PB
+              </button>
+              <button
+                id="btn-hud-exit-game"
+                className="button button-little bg-red"
+                onClick={() => {
+                  setPlayingServerFq(null);
+                  setSpaPortalDrawerOpen(false);
+                  window.history.pushState({}, "", "/member.php");
+                  fetchSession();
+                }}
+              >
+                Thoát Màn Hình Game
+              </button>
+            </div>
+          </div>
+
+          <iframe
+            id="Main_Game"
+            name="mainFrame"
+            title="VUA HẢI TẶC 2023 LouLx Game"
+            src={`/T9NuoYa/T9NuoYa.html?sid=${sid}`}
+            style={{ flex: 1, width: "100%", border: "none" }}
+            allowFullScreen
+          />
+        </div>
+      )}
+
       {/* Top Header: Cx_Nav -> DH_Panel + User_Panel (Exact index.php & member.php structure) */}
+      <div
+        id="spa-portal-container"
+        style={
+          playingServerFq
+            ? spaPortalDrawerOpen
+              ? {
+                  position: "fixed",
+                  top: "48px",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  zIndex: 9000,
+                  maxHeight: "calc(100vh - 64px)",
+                  overflowY: "auto",
+                  background: "rgba(15, 23, 42, 0.95)",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  boxShadow: "0 20px 50px rgba(0,0,0,0.75)",
+                }
+              : { display: "none" }
+            : undefined
+        }
+      >
       <div className="Cx_Nav">
         <div className="DH_Panel float-left">
           <span className="DH_Panel_Badge">PHIÊN BẢN OFFLINE 2023</span>
@@ -443,7 +515,7 @@ export function App() {
 
         <div className="User_Panel bg-main float-right">
           {!session.loggedIn ? (
-            /* Logged-out User_Panel (legacy-ref/www/index.php:17-37) */
+            /* Logged-out User_Panel (legacy-ref/www/index.php:37-52) */
             <div className="user-top-row">
               <img
                 src="/WebRes/img/logo1.png"
@@ -454,7 +526,7 @@ export function App() {
               />
               <div className="float-left text-left">
                 <h4 className="text-white" style={{ margin: "0 0 8px 0" }}>
-                  Đăng nhập tài khoản để vào trò chơi!
+                  Đăng nhập tài khoản để vào trò chơi
                 </h4>
                 <p style={{ margin: "6px 0" }}>
                   <button
@@ -480,7 +552,7 @@ export function App() {
               </div>
             </div>
           ) : (
-            /* Logged-in User_Panel (legacy-ref/www/member.php:17-54) */
+            /* Logged-in User_Panel (legacy-ref/www/member.php:48-67) */
             <div>
               <div className="user-top-row">
                 <img
@@ -545,52 +617,56 @@ export function App() {
         </div>
       </div>
 
-      {/* Main Content Container (legacy-ref/www/index.php & member.php) */}
+      {/* Main Content Container (legacy-ref/www/index.php:53-80 & member.php:68-127) */}
       <div id="Main_Content" className="bg border border-main">
         {!session.loggedIn ? (
-          /* Home Page Content (Verbatim from legacy-ref/www/index.php:40-87) */
-          <div className="margin-big">
-            <h4>
-              <strong>VUA HẢI TẶC 2023</strong>
-            </h4>
-            <p className="bg-inverse">
+          /* Home Page Content (Exact Verbatim from legacy-ref/www/index.php:54-79) */
+          <div className="margin">
+            <p
+              style={{
+                textAlign: "center",
+                padding: "6px",
+                marginBottom: "5px",
+                background: "#169ADA",
+                color: "#ffffff",
+                fontSize: "18px",
+                fontWeight: "bold",
+              }}
+            >
+              VUA HẢI TẶC 2023
+            </p>
+            <blockquote className="border-main" style={{ padding: "12px 16px", margin: "10px 0" }}>
               <strong>
-                ** Lần đầu tạo tài khoản tặng 1000000000 điểm trao đổi ( dùng điểm này để đổi vàng trên web). Tạo nhân vật vào game nhận VIP 9, 1000000 Vàng, 10000000beri, 100000 Lực hành động.
+                Nội dung cập nhật:
+                <br />
+                1. Big Mom, Kaido hình người, Monkey D Dragon, Tezoro, CP0 Lucci, CP0 Kaku,
+                <br />
+                Hoàng hậu kimono, Luật quốc gia Wano, Chopper quốc gia Wano, Zoro quốc gia Wano, Kira quốc gia Wano, Kakutari, Quinn ba thảm họa, Hanayo Nami,
+                <br />
+                Germa Sanji, Gear 4 Snake Luffy, Gear 4 Ape Luffy, Three-Disaster Jack, Kozuki Oden, Golden Lion Shiki, hình ảnh mới của Marco,
+                <br />
+                Hình ảnh mới của Enel, hình ảnh mới của Nami, hình ảnh mới của Hawkeye, hình ảnh mới của các đồng đội khác, v.v... Tôi không đếm hết được, chỉ chơi một mình thôi.
+                <br />
+                2. Đã thêm thú cưỡi mới, Shimanu, Komachiyo, Zeus và Prometheus, cho phép bạn trải nghiệm nhiều niềm vui hơn khi cưỡi trên người khác! !
+                <br />
+                3. BOSS thế giới đã được sửa chữa, thời gian sự kiện ban đầu sẽ được đồng bộ hóa vào mỗi buổi chiều và tối nên tôi biết bạn không có thời gian để chơi.
+                <br />
+                4. Bản đồ đã được sửa chữa cho phiên bản Đêm Giáng Sinh, ngày nào cũng đầy đủ lương thực và pháo binh
+                <br />
+                <br />
+                Lỗi đã biết:
+                <br />
+                1. Vui lòng không sửa đổi trước khi rời khỏi đấu trường, nếu không đấu trường có thể không xuất hiện
+                <br />
+                2. Sau khi mở Trái ác quỷ, bạn phải thoát khỏi trò chơi và vào lại
+                <br />
+                3. Lưu ý không thêm quá 2,1 tỷ đồng vàng Berry
+                <br />
+                4. Huấn luyện gặp vấn đề không hiển thị Đồng Đội đang huấn luyện
+                <br />
+                5. Một số Event không hoạt động
               </strong>
-            </p>
-            <p>
-              <strong>Nội dung cập nhật:</strong>
-            </p>
-            <p>1. Thêm danh hiệu mới: Ngũ hoàng, Vua Hải Tặc Tối Thượng, v.v.</p>
-            <p>2. Đã thêm thời trang Wano Quốc và Cưỡi Linh thú mới.</p>
-            <p>3. Giới hạn cấp độ là 200 và các bản sao mới của Punk Hassad và Đồi Râu Trắng được thêm vào.</p>
-            <p>
-              4. Các hoạt động trong trò chơi cực kỳ phong phú, chẳng hạn như Chiến tranh thế giới, Chiến đấu theo nhóm liên máy chủ và Chiến tranh bang hội.
-            </p>
-            <p>
-              <strong>Lỗi đã biết:</strong>
-            </p>
-            <p>
-              1. Nếu đăng nhập hiện thông báo bảo trì có thể do bạn chưa chạy (1) để bật server hoặc bật rồi nhưng vào quá nhanh, cần đợi 1-2p sau khi bật để các dịch vụ của game chạy hoàn tất.
-            </p>
-            <p>2. Hầu hết thời trang của các tướng là không có tác dụng ( ngoại trừ các tướng tự tạo)</p>
-            <p>
-              3. Do trò chơi là bản dựng lại và sử dụng kết hợp các phiên bản nên có thể có 1 số vật phẩm hoặc sự kiện bị lỗi, không hoạt động ( tỉ lệ rất nhỏ).
-            </p>
-            <p>
-              4. Trò chơi có nhiều tướng Haki: Luffy Gear4, Kaido, BigMom, Râu Trắng, Shank, Mihawk,... có thể kiếm thông qua việc vượt các ải trong trò chơi ( không lấy sẵn được do giới hạn từ nhà phát hành).
-            </p>
-            <p>
-              5. Do giới hạn của trò chơi, các tài nguyên như vàng hay beri không nên vượt quá 100 triệu để tránh bị âm, nếu âm cách duy nhất là tạo nhân vật mới.
-            </p>
-            <p>
-              <strong>
-                Mua Game Tại :{" "}
-                <a href="https://www.loulxgame.com" target="_blank" rel="noreferrer">
-                  LouLx Game
-                </a>
-              </strong>
-            </p>
+            </blockquote>
           </div>
         ) : (
           /* Logged-in Member Center Content (Verbatim from legacy-ref/www/member.php:56-226) */
@@ -814,6 +890,7 @@ export function App() {
             VUA HẢI TẶC &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;LOULX GAME
           </p>
         </div>
+      </div>
       </div>
 
       {/* ==================== LAYER MODALS ==================== */}

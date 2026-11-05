@@ -293,4 +293,125 @@ mod tests {
         }
         assert_no_php_files(Path::new("client-assets"));
     }
+
+    #[test]
+    fn test_honesty_no_fake_metrics_no_test_only_domains_no_junk() {
+        use std::fs;
+        use std::path::Path;
+
+        // 1. Verify `.agents/skills/honesty/SKILL.md` exists, is <= 200 lines, and enforces Graphify MCP
+        let honesty_skill = fs::read_to_string(".agents/skills/honesty/SKILL.md")
+            .expect("Honesty skill (.agents/skills/honesty/SKILL.md) must exist");
+        assert!(
+            honesty_skill.lines().count() <= 200,
+            "honesty/SKILL.md must be <= 200 lines"
+        );
+        assert!(
+            honesty_skill.contains("description: Use when"),
+            "honesty/SKILL.md must have third-person 'description: Use when...'"
+        );
+        assert!(
+            honesty_skill.contains("query_graph") && honesty_skill.contains("get_neighbors"),
+            "honesty/SKILL.md must enforce Graphify MCP tools (query_graph, get_neighbors)"
+        );
+
+        // 2. Verify zero phantom crates or unmeasured ~ns/~us claims in docs & source
+        let cargo_toml = fs::read_to_string("Cargo.toml").expect("Cargo.toml must exist");
+        for path in [
+            "REWRITE_PLAN.md",
+            "GEMINI.md",
+            ".agents/STATE.md",
+            "src/actor.rs",
+            "src/data.rs",
+        ] {
+            let content = fs::read_to_string(path).expect("file must exist");
+            for phantom in ["DashMap", "rusqlite", "rust-embed", "tokio::mpsc"] {
+                if !cargo_toml.contains(phantom) {
+                    assert!(
+                        !content.contains(phantom),
+                        "HONESTY VIOLATION: {} claims phantom crate `{}` not in Cargo.toml",
+                        path,
+                        phantom
+                    );
+                }
+            }
+            for fake_metric in [
+                "~20-50 ns",
+                "~20–50 ns",
+                "~50 ns",
+                "~50ns",
+                "5–15 µs",
+                "15–50 µs",
+                "0.1 µs",
+            ] {
+                assert!(
+                    !content.contains(fake_metric),
+                    "HONESTY VIOLATION: {} contains unmeasured fake metric `{}`",
+                    path,
+                    fake_metric
+                );
+            }
+        }
+
+        // 3. Verify all 11 domain modules + StaticBtstore are wired in production `dispatch_client_rpc`
+        let mod_rs = fs::read_to_string("src/domain/mod.rs").expect("src/domain/mod.rs must exist");
+        let prod_code = mod_rs
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production section must exist");
+        for required_domain in [
+            "user::",
+            "hero::",
+            "bag::",
+            "forge::",
+            "copy::",
+            "arena::",
+            "boss::",
+            "guild::",
+            "town::",
+            "pet::",
+            "economy::",
+            "StaticBtstore",
+        ] {
+            assert!(
+                prod_code.contains(required_domain),
+                "HONESTY VIOLATION: `{}` is only called in #[cfg(test)] and not wired into production `dispatch_client_rpc`",
+                required_domain
+            );
+        }
+
+        // 4. Verify `web/src/App.tsx` contains verbatim `legacy-ref/www/index.php:61-65` text
+        let app_tsx = fs::read_to_string("web/src/App.tsx").expect("web/src/App.tsx must exist");
+        assert!(
+            app_tsx.contains("Monkey D Dragon, Tezoro, CP0 Lucci, CP0 Kaku")
+                && app_tsx.contains("id=\"spa-game-shell\""),
+            "HONESTY VIOLATION: web/src/App.tsx does not match verbatim legacy-ref/www/index.php:61 or Option B SPA shell"
+        );
+
+        // 5. Verify zero backup/junk files (.orig, .bk, .bak, .jsfl, .2017*-.2020*) in client-assets/
+        fn assert_no_junk_files(dir: &Path) {
+            if !dir.exists() {
+                return;
+            }
+            for entry in fs::read_dir(dir).expect("read_dir failed") {
+                let entry = entry.expect("entry failed");
+                let path = entry.path();
+                if path.is_dir() {
+                    assert_no_junk_files(&path);
+                } else if let Some(ext) = path.extension() {
+                    let ext_str = ext.to_string_lossy().to_ascii_lowercase();
+                    let is_dated_backup = ext_str.len() == 8
+                        && (ext_str.starts_with("201") || ext_str.starts_with("202"))
+                        && ext_str.chars().all(|c| c.is_ascii_digit());
+                    assert!(
+                        !matches!(ext_str.as_str(), "orig" | "bk" | "bak" | "jsfl" | "1")
+                            && !is_dated_backup,
+                        "HONESTY VIOLATION: Junk/backup file left in client-assets/: {:?}",
+                        path
+                    );
+                }
+            }
+        }
+        assert_no_junk_files(Path::new("client-assets"));
+    }
 }

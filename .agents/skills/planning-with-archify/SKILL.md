@@ -7,62 +7,53 @@ description: Use when creating, updating, reviewing, or executing any implementa
 
 ## Overview
 
-Every planning or architectural update in `king-pirate` must start from the compact Second Brain state (`.agents/STATE.md` + `graphify-out/GRAPH_REPORT.md`), define **granular, actionable Markdown checkboxes (`- [ ]` / `- [x]`) for every sub-task in every phase**, compile a validated standalone interactive Archify page (`docs/rewrite-plan.html`), and enforce that **plan files are never pushed to Git** while completed source-code phases are pushed to `https://github.com/farmer911/king-pirate-web-game.git`.
+Every planning or architectural update in `king-pirate` must start from `.agents/STATE.md` + **Graphify MCP** (`query_graph`, `get_node`, `get_neighbors`), propose concrete architectural options (`Gate 4`), wait for user approval when in `/plan` or answering questions (never self-approving `- [ ] -> - [x]` in the same turn without user approval), compile `docs/rewrite-plan.html` via Archify, and never push plan files to Git.
 
-**Core principle:** Never plan without actionable `- [ ]` checkboxes for the agent to follow step-by-step, never update a plan without regenerating `docs/rewrite-plan.html` via Archify, and never push plan files to Git.
+**Core principle:** Answer questions and align on options first; track every task with `- [ ]` checkboxes; verify every metric with real commands (`0` fake metrics or phantom crates); and regenerate `docs/rewrite-plan.html`.
+
+**REQUIRED SUB-SKILL:** Use `honesty`, `empirical-metrics-and-knowledge-tools`, and `engineering-audit-gate`.
 
 ## The Iron Laws
 
 ```
-1. ZERO CONTEXT RELOAD: READ .agents/STATE.md AND graphify-out/GRAPH_REPORT.md FIRST BEFORE ASKING QUESTIONS OR SCANNING FILES.
-2. PEAK PERFORMANCE FIRST (RULE 08): ALWAYS PROPOSE THE HIGHEST-PERFORMANCE, BEST-OUTCOME ARCHITECTURE REGARDLESS OF IMPLEMENTATION TIME OR FILE COUNT.
-3. MANDATORY CHECKBOX GUARDRAIL: EVERY PHASE AND SUB-TASK IN REWRITE_PLAN.md, .agents/STATE.md, AND candidate.archify.md MUST HAVE GRANULAR "- [ ]" CHECKBOXES THAT THE AGENT FOLLOWS AND MARKS "- [x]" UPON VERIFIED COMPLETION.
-4. NO PLAN UPDATE WITHOUT ARCHIFY: EVERY CHANGE TO THE PLAN OR CHECKBOX STATUS MUST UPDATE .agents/STATE.md, REWRITE_PLAN.md, AND docs/rewrite-plan.html VIA archify.mjs finalize explainer.
-5. GIT PHASE-PUSH & ZERO-PLAN-ON-GIT: NEVER COMMIT OR PUSH PLAN FILES (REWRITE_PLAN.md, docs/, .archify/, .agents/STATE.md, graphify-out/, legacy-ref/). PUSH ONLY NEW SOURCE CODE AFTER EACH PHASE PASSES VERIFICATION.
+1. ALIGN BEFORE EXECUTING: WHEN THE USER INVOKES /plan OR ASKS QUESTIONS, ANSWER DIRECTLY, PRESENT GATE 4 OPTIONS, AND WAIT FOR USER APPROVAL BEFORE MODIFYING PRODUCTION CODE.
+2. GRAPHIFY MCP FIRST: READ .agents/STATE.md AND QUERY GRAPHIFY MCP (query_graph / get_node / get_neighbors) BEFORE READING SOURCE FILES.
+3. ZERO FAKE METRICS OR PHANTOM CRATES IN PLANS: EVERY METRIC AND DEPENDENCY IN REWRITE_PLAN.md, GEMINI.md, STATE.md, AND candidate.archify.md MUST MATCH Cargo.toml AND REAL SHELL COMMANDS.
+4. MANDATORY CHECKBOX GUARDRAIL: EVERY PHASE AND SUB-TASK MUST HAVE GRANULAR "- [ ]" CHECKBOXES THAT ONLY FLIP TO "- [x]" AFTER FRESH VERIFICATION PASSES.
+5. NO PLAN UPDATE WITHOUT ARCHIFY & GIT ISOLATION: ALWAYS COMPILE docs/rewrite-plan.html VIA archify.mjs finalize explainer, AND NEVER PUSH PLAN FILES TO GIT.
 ```
 
 ## Mandatory 5-Step Planning & Execution Guardrail
 
-### Step 1: Instant Context Bootstrap (Zero User Re-Prompting)
-1. Read `/Users/phucnguyen/Dev/king-pirate/.agents/STATE.md` (`<= 50` lines) and `/Users/phucnguyen/Dev/king-pirate/GEMINI.md`.
-2. Read `/Users/phucnguyen/Dev/king-pirate/graphify-out/GRAPH_REPORT.md` if module relationships are needed.
-3. Never ask the user to repeat architectural decisions already recorded in `STATE.md` or `GEMINI.md`.
+### Step 1: Instant Context Bootstrap via Graphify MCP
+1. Read `/Users/phucnguyen/Dev/king-pirate/.agents/STATE.md` (`<= 50` lines).
+2. Query `call_mcp_tool(ServerName="graphify", ToolName="query_graph" | "get_node" | "get_neighbors")` to inspect symbols and edges without scanning raw files.
 
-### Step 2: Author Granular Checkboxes (`- [ ]`) in Plan Files (100% English)
-1. Every phase in `/Users/phucnguyen/Dev/king-pirate/REWRITE_PLAN.md`, `/Users/phucnguyen/Dev/king-pirate/.agents/STATE.md`, and `/Users/phucnguyen/Dev/king-pirate/.archify/explainer-vht-rust-rewrite/candidate.archify.md` MUST break work down into concrete, verifiable `- [ ]` checkboxes:
-   - `[ ]` Target `.rs` module & ground-truth citation (`file:line` in `legacy-ref/`)
-   - `[ ]` Unit / differential test (`cargo test` RED -> GREEN)
-   - `[ ]` Registration in `porting-legacy-to-rust/SKILL.md` Shared Primitives Registry
-   - `[ ]` Phase verification & Git push (`git push origin main`)
-2. As each task completes and passes `rtk ~/.cargo/bin/cargo check && rtk ~/.cargo/bin/cargo test`, immediately flip `- [ ]` to `- [x]`.
+### Step 2: Propose Options (`Gate 4`) & Author Granular Checkboxes (`- [ ]`) (100% English in Repo Files)
+1. If the user asked a question or invoked `/plan`, present 2–3 architectural options with measured trade-offs and wait for approval.
+2. Record granular `- [ ]` checkboxes in `REWRITE_PLAN.md`, `.agents/STATE.md`, and `.archify/explainer-vht-rust-rewrite/candidate.archify.md`.
+3. Only flip `- [ ]` to `- [x]` after `rtk ~/.cargo/bin/cargo check && rtk ~/.cargo/bin/cargo test` (including `test_honesty_no_fake_metrics_no_test_only_domains_no_junk`) passes.
 
 ### Step 3: Compile Interactive Archify Explainer (`docs/rewrite-plan.html`)
-1. Update `/Users/phucnguyen/Dev/king-pirate/.archify/explainer-vht-rust-rewrite/candidate.archify.md` (including the phase checkbox list at the bottom of the explainer).
-2. Run Archify `finalize explainer`:
-   ```bash
-   cd /Users/phucnguyen/Dev/king-pirate && node /Users/phucnguyen/.gemini/config/skills/archify/bin/archify.mjs finalize explainer .archify/explainer-vht-rust-rewrite/candidate.archify.md docs/rewrite-plan.html --repo-root /Users/phucnguyen/Dev/king-pirate --json && rm -f docs/rewrite-plan.finalize*.json
-   ```
-3. Verify `"ok": true` and `"diagnostics": []` (`0 errors, 0 warnings`).
+```bash
+cd /Users/phucnguyen/Dev/king-pirate && node /Users/phucnguyen/.gemini/config/skills/archify/bin/archify.mjs finalize explainer .archify/explainer-vht-rust-rewrite/candidate.archify.md docs/rewrite-plan.html --repo-root /Users/phucnguyen/Dev/king-pirate --json && rm -f docs/rewrite-plan.finalize*.json
+```
 
 ### Step 4: Sync Second Brain
-Run `bash /Users/phucnguyen/Dev/king-pirate/.agents/skills/updating-project-knowledge/scripts/sync-knowledge.sh` so the updated plan and Archify artifact are linked in `graphify-out/obsidian/`.
+Run `bash /Users/phucnguyen/Dev/king-pirate/.agents/skills/updating-project-knowledge/scripts/sync-knowledge.sh`.
 
 ### Step 5: Phase-Completion Git Push (Source Code Only — Never Push Plan Files)
-Whenever a phase is completed and all its `- [x]` checkboxes and `cargo test` suites pass:
-1. Verify `rtk git status` confirms `REWRITE_PLAN.md`, `docs/`, `.archify/`, `.agents/STATE.md`, `graphify-out/`, and `legacy-ref/` are ignored by `.gitignore`.
-2. Commit and push the new source code for that phase to `https://github.com/farmer911/king-pirate-web-game.git`.
+Verify `rtk git status` confirms `REWRITE_PLAN.md`, `docs/`, `.archify/`, `.agents/STATE.md`, `graphify-out/`, and `legacy-ref/` are ignored by `.gitignore`, then push verified source code to `origin main`.
 
 ## Rationalization Table
 
 | Excuse | Reality |
 | :--- | :--- |
-| "I'll write a high-level prose paragraph for Phase 2 instead of `- [ ]` checkboxes" | Prose paragraphs cause agents to skip sub-tasks or verification steps. Every deliverable, module, and test MUST be a `- [ ]` checkbox. |
-| "Running `archify` CLI is unnecessary overhead for a quick checkbox update" | Skipping `archify` leaves `docs/rewrite-plan.html` out of sync with `REWRITE_PLAN.md`. `archify.mjs finalize explainer` takes `< 0.6s`. Run it every time. |
-| "I'll commit `REWRITE_PLAN.md` or `docs/rewrite-plan.html` to Git so it's backed up" | **Forbidden.** The user explicitly mandated never pushing plan files to Git. Keep them local and listed in `.gitignore`. |
+| "I'll add `- [ ]` to `STATE.md`, write the code, and mark `- [x]` right away when the user asked me a question" | Self-approving without answering the user first violates `honesty` Iron Law #1 and Rule 09. |
+| "I can leave theoretical numbers (`5–15 µs`, `DashMap`) in `REWRITE_PLAN.md`" | Fails `test_honesty_no_fake_metrics_no_test_only_domains_no_junk`. Only real dependencies in `Cargo.toml` and measured numbers are allowed. |
 
 ## Red Flags - STOP and Fix Immediately
 
-- Writing any phase in `REWRITE_PLAN.md`, `.agents/STATE.md`, or `candidate.archify.md` without granular `- [ ]` checkboxes.
-- Starting or finishing a phase without updating its `- [ ]` -> `- [x]` checkboxes.
-- Editing `REWRITE_PLAN.md` or `.agents/STATE.md` without running `archify.mjs finalize explainer` to update `docs/rewrite-plan.html`.
-- Staging or pushing `REWRITE_PLAN.md`, `docs/`, `.archify/`, `.agents/STATE.md`, `graphify-out/`, or `legacy-ref/` to Git.
+- Executing code changes during `/plan` before the user approves the plan.
+- Writing any crate name in `REWRITE_PLAN.md` or `STATE.md` that is not in `Cargo.toml`.
+- Editing `REWRITE_PLAN.md` or `.agents/STATE.md` without regenerating `docs/rewrite-plan.html` via Archify.

@@ -45,7 +45,8 @@ pub const LEVEL_STEP_EXP: [i64; 199] = [
     15886950, 16047400,
 ];
 
-/// Compute cumulative `all_exp` for `target_level` (`1..=200`) matching `calculateAllExp` (`legacy-ref/www/level.php:42-56`).
+/// Compute cumulative `all_exp` required for `calculateActualLevel` (`legacy-ref/www/level.php:59-71`)
+/// to reach `target_level` (`1..=200`) without triggering the `actual_level != level` warning at `level.php:120`.
 pub fn calculate_all_exp(target_level: usize) -> Option<i64> {
     if !(1..=200).contains(&target_level) {
         return None;

@@ -13,13 +13,11 @@ use std::collections::BTreeMap;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// SQL dialect selector for Dual-Mode operation (`Rule 08`):
-/// - `SqliteWal`: Zero-VM local macOS development (`< 15 ms` cold start, `PRAGMA journal_mode=WAL`).
-/// - `MariaDbInnoDb`: High-concurrency online Linux VPS Docker production (`InnoDB` row-level locking).
+/// Storage mode selector for `DataStore`:
+/// - `SqliteWal`: Local development in-memory table store with AMF3 snapshot persistence (`data/pirate_store.amf3`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SqlDialect {
     SqliteWal,
-    MariaDbInnoDb,
 }
 
 /// Column value stored in `pirate20002` (`INTEGER`, `TEXT`, or `va_*` `BLOB`).
@@ -82,48 +80,6 @@ impl WhereCond {
                 }
                 _ => true,
             },
-        }
-    }
-}
-
-/// Build the dialect-specific SQL statement for `insertIgnore` or `insertOrUpdate` (`NewData.class.php:809-830`).
-pub fn build_upsert_sql(
-    dialect: SqlDialect,
-    table: &str,
-    columns: &[&str],
-    duplicate_keys: &[&str],
-    ignore_only: bool,
-) -> String {
-    let cols_joined = columns.join(", ");
-    let placeholders: Vec<&str> = columns.iter().map(|_| "?").collect();
-    let vals_joined = placeholders.join(", ");
-
-    match (dialect, ignore_only) {
-        (SqlDialect::SqliteWal, true) => {
-            format!("INSERT OR IGNORE INTO `{table}` ({cols_joined}) VALUES ({vals_joined})")
-        }
-        (SqlDialect::MariaDbInnoDb, true) => {
-            format!("INSERT IGNORE INTO `{table}` ({cols_joined}) VALUES ({vals_joined})")
-        }
-        (SqlDialect::SqliteWal, false) => {
-            let updates: Vec<String> = duplicate_keys
-                .iter()
-                .map(|k| format!("`{k}` = excluded.`{k}`"))
-                .collect();
-            format!(
-                "INSERT INTO `{table}` ({cols_joined}) VALUES ({vals_joined}) ON CONFLICT DO UPDATE SET {}",
-                updates.join(", ")
-            )
-        }
-        (SqlDialect::MariaDbInnoDb, false) => {
-            let updates: Vec<String> = duplicate_keys
-                .iter()
-                .map(|k| format!("`{k}` = VALUES(`{k}`)"))
-                .collect();
-            format!(
-                "INSERT INTO `{table}` ({cols_joined}) VALUES ({vals_joined}) ON DUPLICATE KEY UPDATE {}",
-                updates.join(", ")
-            )
         }
     }
 }
@@ -462,24 +418,5 @@ mod tests {
         );
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].get("gold_num"), Some(&ColumnValue::Int(150)));
-
-        // Verify SQLite WAL vs MariaDB InnoDB dialect SQL generation
-        let sqlite_sql = build_upsert_sql(
-            SqlDialect::SqliteWal,
-            "t_user",
-            &["uid", "gold_num"],
-            &["gold_num"],
-            false,
-        );
-        assert!(sqlite_sql.contains("ON CONFLICT DO UPDATE"));
-
-        let mariadb_sql = build_upsert_sql(
-            SqlDialect::MariaDbInnoDb,
-            "t_user",
-            &["uid", "gold_num"],
-            &["gold_num"],
-            false,
-        );
-        assert!(mariadb_sql.contains("ON DUPLICATE KEY UPDATE"));
     }
 }
