@@ -36,6 +36,8 @@ Before writing any function, struct, or constant, check this table. If it alread
 | **In-Memory Player Actor** | `src/actor.rs` | `UPPER_LIMIT_BELLY`, `PlayerSessionActor`, `PlayerDirtyDelta`, `add_belly`, `add_gold`, `add_prestige`, `add_execution`, `add_fight_cdtime`, `move_in_town`, `take_dirty_delta` | `OtherUserObj.class.php:53-55, 108-130, 447-650` |
 | **Dual-Mode Data Store** | `src/data.rs` | `SqlDialect::{SqliteWal,MariaDbInnoDb}`, `ColumnValue`, `UpdateOp`, `WhereCond`, `build_upsert_sql`, `IdGenerator::next_id`, `DataStore::{insert_or_update,select,select_count,update,delete,apply_write_behind_delta}` | `NewData.class.php:18-48, 748-988`, `Framework.cfg.php:40` |
 | **RPC Gateway** | `src/gateway.rs` | `FLASH_POLICY_REQUEST`, `FLASH_POLICY_RESPONSE`, `ConnectionSession`, `MethodAccessTier`, `classify_method`, `authorize_rpc_call`, `encode_framed_packet`, `decode_framed_packet` | `game20002.xml:39-100`, `RPCFramework.class.php:348-404, 783-865`, `Framework.cfg.php:203-411` |
+| **Static Game Store** | `src/btstore.rs` | `RawSkill`, `RawBuffer`, `RawTarget`, `StaticBtstore::{new_baseline,load_skills_csv,get_skill,get_buffer,get_target}` | `battle-dwarf-clean.hpp:243-244, 318`, `skill.csv`, `buffer.csv`, `target.csv` |
+| **Combat Engine** | `src/battle.rs` | `HeroUnit`, `FormationGrid`, `ReactionRecord`, `ActionRecord`, `BattleResult::{to_amf3}`, `compute_skill_damage`, `execute_battle_do_hero` | `battle-dwarf-clean.hpp:1-386`, `Battle.class.php:81-93, 128-134` |
 | **Entrypoint** | `src/main.rs` | Binary bootstrap & compile-time lint gate (`#![deny(dead_code, unused_imports, unused_variables)]`) | `start_all.sh` |
 
 ## Mandatory 5-Step Porting Workflow

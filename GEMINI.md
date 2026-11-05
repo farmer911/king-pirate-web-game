@@ -97,7 +97,7 @@ This document is the **Single Source of Truth (SSoT)** for the **King Pirate** p
 
 | Component | Technology | Path | Status |
 | :--- | :--- | :--- | :--- |
-| **Rust Server Crate & Wire Protocol** | **Rust 1.99 (`edition = "2024"`, `#![deny(dead_code)]`)** | `Cargo.toml`, `src/{main,protocol,amf3,crypt,actor,data,gateway}.rs`, `Dockerfile`, `docker-compose.yml` | ✅ Phase 1 & 2 Complete (`13/13` `cargo test` Pass) |
+| **Rust Server Crate & Wire Protocol** | **Rust 1.99 (`edition = "2024"`, `#![deny(dead_code)]`)** | `Cargo.toml`, `src/{main,protocol,amf3,crypt,actor,data,gateway,btstore,battle}.rs`, `Dockerfile`, `docker-compose.yml` | ✅ Phase 1, 2 & 3 Complete (`15/15` `cargo test` Pass) |
 | **Peak-Performance Actor + Hybrid Storage** | **In-Memory `PlayerSessionActor` (`~50 ns`) + Write-Behind SQLite (Mac Dev) / MariaDB (Linux Docker Prod)** | `REWRITE_PLAN.md` (Section 5–7), `docs/rewrite-plan.html` | ✅ Forensic Code & Security Verified |
 | **Forensic Investigation & Rust Plan** | **Markdown + Archify Interactive HTML** | `REWRITE_PLAN.md`, `.agents/STATE.md`, `docs/rewrite-plan.html` | ✅ 100% Ground-Truth Verified |
 | **Legacy Ground-Truth Corpus** | **PHP 5.5 + XML + DWARF C++ Headers + SQL Schema** | `legacy-ref/` | ✅ Extracted & Sanitized (`0` CJK chars) |
