@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd /Users/phucnguyen/Dev/king-pirate
+cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 
-/Users/phucnguyen/.local/share/uv/tools/graphifyy/bin/python3 -c '
+"${GRAPHIFY_PYTHON:-python3}" -c '
 import json
 from pathlib import Path
 from graphify.detect import detect, save_manifest
@@ -32,12 +32,8 @@ semantic_nodes = [
     {"id": "doc_rewrite_plan", "label": "REWRITE_PLAN.md (100% Rust & Anti-Bloat Plan)", "file_type": "document", "source_file": "REWRITE_PLAN.md", "source_location": "L1"},
     {"id": "doc_state_md", "label": "STATE.md (Rust Investigation & Phase Tracker)", "file_type": "document", "source_file": ".agents/STATE.md", "source_location": "L1"},
     {"id": "doc_archify_html", "label": "docs/rewrite-plan.html (Interactive Archify Plan)", "file_type": "document", "source_file": "docs/rewrite-plan.html", "source_location": "L1"},
-    {"id": "rule_zero_hallucination", "label": "Rule #1: Zero Hallucination & Ground Truth", "file_type": "document", "source_file": ".agents/rules/01-zero-hallucination-ground-truth.md", "source_location": "L1"},
-    {"id": "rule_graphify_obsidian", "label": "Rule #2: Graphify + Obsidian Second Brain & RTK", "file_type": "document", "source_file": ".agents/rules/02-graphify-obsidian-rtk.md", "source_location": "L1"},
-    {"id": "rule_diff_tdd", "label": "Rule #3: Differential Testing & TDD", "file_type": "document", "source_file": ".agents/rules/03-differential-tdd-verification.md", "source_location": "L1"},
-    {"id": "rule_anti_bloat", "label": "Rule #4: Ponytail Anti-Bloat & Zero Duplication", "file_type": "document", "source_file": ".agents/rules/04-ponytail-anti-bloat-rust.md", "source_location": "L1"},
-    {"id": "rule_language_policy", "label": "Rule #5: 100% English Code & Zero Chinese Policy", "file_type": "document", "source_file": ".agents/rules/05-language-policy.md", "source_location": "L1"},
-    {"id": "rule_keep_up_to_date", "label": "Rule #6: keep-up-to-date.md (Sync Docs, Skills, Graph & Archify)", "file_type": "document", "source_file": ".agents/rules/keep-up-to-date.md", "source_location": "L1"},
+    {"id": "rule_core", "label": "Core Rules (00-core.md, the only always-on rule)", "file_type": "document", "source_file": ".agents/rules/00-core.md", "source_location": "L1"},
+    {"id": "doc_claude_md", "label": "CLAUDE.md (imports GEMINI.md and core rules)", "file_type": "document", "source_file": "CLAUDE.md", "source_location": "L1"},
     {"id": "skill_porting_rust", "label": "Skill: porting-legacy-to-rust", "file_type": "document", "source_file": ".agents/skills/porting-legacy-to-rust/SKILL.md", "source_location": "L1"},
     {"id": "skill_updating_knowledge", "label": "Skill: updating-project-knowledge", "file_type": "document", "source_file": ".agents/skills/updating-project-knowledge/SKILL.md", "source_location": "L1"},
     {"id": "skill_planning_archify", "label": "Skill: planning-with-archify", "file_type": "document", "source_file": ".agents/skills/planning-with-archify/SKILL.md", "source_location": "L1"},
@@ -51,15 +47,11 @@ semantic_nodes = [
 ]
 
 semantic_edges = [
-    {"source": "doc_gemini_md", "target": "rule_zero_hallucination", "relation": "enforces", "confidence": "EXTRACTED", "source_file": "GEMINI.md"},
-    {"source": "doc_gemini_md", "target": "rule_graphify_obsidian", "relation": "enforces", "confidence": "EXTRACTED", "source_file": "GEMINI.md"},
-    {"source": "doc_gemini_md", "target": "rule_diff_tdd", "relation": "enforces", "confidence": "EXTRACTED", "source_file": "GEMINI.md"},
-    {"source": "doc_gemini_md", "target": "rule_anti_bloat", "relation": "enforces", "confidence": "EXTRACTED", "source_file": "GEMINI.md"},
-    {"source": "doc_gemini_md", "target": "rule_language_policy", "relation": "enforces", "confidence": "EXTRACTED", "source_file": "GEMINI.md"},
-    {"source": "doc_gemini_md", "target": "rule_keep_up_to_date", "relation": "enforces", "confidence": "EXTRACTED", "source_file": "GEMINI.md"},
-    {"source": "rule_keep_up_to_date", "target": "skill_porting_rust", "relation": "mandates_updating", "confidence": "EXTRACTED", "source_file": ".agents/rules/keep-up-to-date.md"},
-    {"source": "rule_keep_up_to_date", "target": "skill_updating_knowledge", "relation": "mandates_running", "confidence": "EXTRACTED", "source_file": ".agents/rules/keep-up-to-date.md"},
-    {"source": "rule_keep_up_to_date", "target": "skill_planning_archify", "relation": "mandates_running", "confidence": "EXTRACTED", "source_file": ".agents/rules/keep-up-to-date.md"},
+    {"source": "doc_gemini_md", "target": "rule_core", "relation": "enforces", "confidence": "EXTRACTED", "source_file": "GEMINI.md"},
+    {"source": "doc_claude_md", "target": "doc_gemini_md", "relation": "imports", "confidence": "EXTRACTED", "source_file": "CLAUDE.md"},
+    {"source": "rule_core", "target": "skill_porting_rust", "relation": "routes_to", "confidence": "EXTRACTED", "source_file": ".agents/rules/00-core.md"},
+    {"source": "rule_core", "target": "skill_updating_knowledge", "relation": "routes_to", "confidence": "EXTRACTED", "source_file": ".agents/rules/00-core.md"},
+    {"source": "rule_core", "target": "skill_planning_archify", "relation": "routes_to", "confidence": "EXTRACTED", "source_file": ".agents/rules/00-core.md"},
     {"source": "skill_planning_archify", "target": "doc_archify_html", "relation": "generates", "confidence": "EXTRACTED", "source_file": ".agents/skills/planning-with-archify/SKILL.md"},
     {"source": "skill_planning_archify", "target": "doc_rewrite_plan", "relation": "updates", "confidence": "EXTRACTED", "source_file": ".agents/skills/planning-with-archify/SKILL.md"},
     {"source": "doc_rewrite_plan", "target": "doc_state_md", "relation": "tracks_in", "confidence": "EXTRACTED", "source_file": "REWRITE_PLAN.md"},

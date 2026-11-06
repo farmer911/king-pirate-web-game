@@ -1,129 +1,68 @@
-# King Pirate (`v298`) — Project Knowledge Base & Agent Rules (`GEMINI.md`)
+# King Pirate - Shared Project Knowledge
 
-This document is the **Single Source of Truth (SSoT)** for the **King Pirate** project (`/Users/phucnguyen/Dev/king-pirate`), a **100% Rust (`aarch64-apple-darwin` Single-Binary Architecture + Zero Dead Code)** rewrite of the legacy `v298` game server.
+Read by Gemini (this file) and by Claude (`CLAUDE.md` imports it). Keep facts here, rules in `.agents/rules/00-core.md`, plans in `REWRITE_PLAN.md`.
 
----
+@.agents/rules/00-core.md
 
-## 1. MANDATORY RULE #1: Zero Hallucination (100% Ground-Truth Enforcement)
+## 1. Goal
 
-> **Supreme Principle:** **NEVER GUESS (No Guessing)** and **NEVER HALLUCINATE (No Hallucination)** any packet header byte, AMF3 flag, cryptographic key, damage/rage formula, or database column. Every line of Rust code and technical claim **MUST** cite (`file:line`) verified ground truth in `legacy-ref/`:
+Rewrite the legacy "Vua Hai Tac 2025" (BabelTime `v298`) game server as **one Rust binary in one Docker container**, started with `docker compose up`, light enough (low RAM, fast start) to host cheaply for a small group of friends. Non-commercial.
 
-| Ground-Truth Subsystem | Verified Reference Path in `/Users/phucnguyen/Dev/king-pirate/` |
+## 2. Repository Map
+
+| Path | What | In git |
+| :--- | :--- | :--- |
+| `src/` | Rust server (protocol, AMF3, crypto, gateway, portal, data store, battle, domains) | yes |
+| `web/` | React portal + Ruffle game shell, Playwright tests in `web/e2e/` | yes |
+| `.agents/rules/00-core.md` | The only always-on rule file | yes |
+| `.agents/skills/*/SKILL.md` | Skills shared by Gemini and Claude | yes |
+| `CLAUDE.md`, `GEMINI.md` | Agent entry points (this file is the shared knowledge) | yes |
+| `legacy-ref/` | Verbatim read-only copy of the legacy server, see `legacy-ref/INVENTORY.md` | no (local) |
+| `client-assets/` | Game client (`Main.swf`, Ruffle, built portal) | no (local) |
+| `data/` | Runtime save data | no (local) |
+| `REWRITE_PLAN.md` | Phases, checkboxes, decisions, stub list | no (local) |
+
+## 3. Commands
+
+| Task | Command |
 | :--- | :--- |
-| **8-Byte Framing + Double AMF3 + MD5 XOR Checksum** | `legacy-ref/rpcfw/lib/PHPProxy.class.php` (`L108-L381`), `legacy-ref/rpcfw/lib/Util.class.php` (`L492-L538`) |
-| **DES-CBC Encryption (`BabelCrypt`) & Auth Hash** | `legacy-ref/rpcfw/lib/BabelCrypt.class.php` (`L18-L66`), `legacy-ref/rpcfw/conf/BabelCrypt.cfg.php` (`L18-L29`) |
-| **RPC Dispatch & Session Lifecycle (`RPCFramework`)** | `legacy-ref/rpcfw/lib/RPCFramework.class.php` (`L185-L800`), `legacy-ref/rpcfw/lib/ServerProxy.class.php` (`L32-L248`) |
-| **Static Game Store (`BtstoreElement` + `flock`)** | `legacy-ref/rpcfw/lib/SimpleBtstore.php` (`L18-L394`) |
-| **Query Builder (`CData`) & Cache (`LocalQueryCache`)** | `legacy-ref/rpcfw/lib/data/NewData.class.php` (`L58-L927`), `legacy-ref/rpcfw/lib/data/LocalQueryCache.class.php` (`L18-L411`) |
-| **4 C++ Daemon Configurations (`lcserver`, `dataproxy`, `phpproxy`, `battle`)** | `legacy-ref/lcserver/conf/game20002.xml`, `legacy-ref/dataproxy/conf/config.xml`, `legacy-ref/phpproxy/conf/module.xml`, `legacy-ref/battle/conf/config.xml` |
-| **Combat Engine DWARF C++ Structs (`battle`)** | `legacy-ref/dwarf/battle-dwarf-clean.hpp` (`CHero`, `CSkill`, `CFormation`, `CBuffer`, `CPet`, `CActionRecord`, `CReactionRecord`) |
-| **Static Combat Tables (`battle/data`)** | `legacy-ref/battle/data/skill.csv` (`2.5 MB`), `buffer.csv` (`157 KB`), `target.csv` (`4.6 KB`) |
-| **Database Schema (210 Game Tables + 3 Web Tables)** | `legacy-ref/schema/pirate20002-schema.sql` (`4,118` lines), `legacy-ref/schema/t9-rxhzw-web-schema.sql` (`82` lines) |
+| Unit + policy tests | `cargo test` |
+| Build server binary | `cargo build` (required before `serve`; `cargo test` does not rebuild it) |
+| Run server | `cargo run -- serve` (HTTP `:8081`, WS `:8003`, TCP `:8002`, Flash policy `:843`) |
+| Build portal | `cd web && npm run build` (writes `client-assets/portal/app.js`) |
+| Portal E2E | `cd web && npx playwright test` (server must be running) |
+| Env vars | `KING_PIRATE_ASSETS` (default `client-assets`), `KING_PIRATE_STORE` (default `data/pirate_store.amf3`), `KING_PIRATE_SERVE=1` |
 
----
+## 4. Legacy System (ground truth)
 
-## 2. MANDATORY RULE #2: Second Brain (`Graphify + Obsidian`) & Token Optimization (`RTK`)
+Full inventory: `legacy-ref/INVENTORY.md`. Summary (measured from the extracted VM, 2026-11-06):
 
-1. **Query Knowledge Graph (`Graphify MCP`) & Obsidian Vault Before Reading Raw Files:**
-   - **Graphify MCP Server (`ServerName: "graphify"`):** Always call `query_graph`, `get_node`, or `get_neighbors` first to get exact `src=... loc=L...` coordinates and `[calls]` edges.
-   - Knowledge Graph report: `graphify-out/GRAPH_REPORT.md` and `graphify-out/graph.json`.
-   - Obsidian Second Brain Vault: `graphify-out/obsidian/` (open directly in **Obsidian.app** for interactive Graph View with `[[wikilinks]]` and `#community/...` tags).
-   - **Mandatory Lookup Sequence:** Read `.agents/STATE.md` -> call `graphify` MCP (`query_graph` / `get_node` / `get_neighbors`) -> read only the required line range (`StartLine`..`EndLine`, `<= 120` lines).
-2. **Compress CLI Output with `rtk`:**
-   - Always prefer `rtk ls`, `rtk git status`, `rtk git diff`, `rtk cargo check`, `rtk cargo test` over raw shell commands.
-3. **Git Safety:**
-   - `graphify-out/` MUST remain in `.gitignore` and must NEVER be committed or pushed to Git remote.
+- **Stack:** CentOS 6.4 VM. Four C++ daemons (`lcserver` gateway :8002, `phpproxy` unix socket, `dataproxy` :3300, `battle` :1234), PHP 5 `rpcfw` behind php-cgi FastCGI :5555, MySQL 5.1.59, memcached, nginx portal.
+- **Game logic to port:** `rpcfw/module/` has 106 modules, 918 PHP files, 192,070 lines, at least 790 RPC methods. Framework (`lib/`, `conf/`, `def/`, `hook/`) adds 24,687 lines. Largest: `copy` 10,870, `user` 8,312, `item` 7,984, `groupwar` 7,799, `hero` 7,235.
+- **Static data:** `rpcfw/data/btstore/` (184 generated tables, 147 MB) and `battle/data/*.csv`.
+- **Combat:** only a C++ binary (`battle/bin/battle`), but it is **not stripped and carries DWARF debug info**, so it can be decompiled. It has elemental damage (fire, thunder, water, wind), composite skills, buffs and `attack_coef`/`defend_coef = 0.0001` (`battle/conf/config.xml`). It is also a standalone TCP service, so it can serve as a test oracle.
+- **Database:** 210 tables in `db-raw/pirate20002/` (raw MySQL 5.1 files; needs a MySQL 5.1-compatible server to dump).
+- **Rust coverage today:** the dispatcher names about 84 methods across 37 classes (regex count over `src/domain/mod.rs`), about 11% of 790, and most of those return hard-coded data.
+- **Where to look:** RPC entry `rpcfw/module/<class>/<Class>.class.php`, rules `<Class>Logic.class.php`, SQL `<Class>Dao.class.php`, constants `rpcfw/conf/*.cfg.php`, method access lists `rpcfw/conf/Framework.cfg.php:203-266`, token-exempt methods `lcserver/conf/game20002.xml`.
 
----
+## 5. Component Status (honest, update at phase end)
 
-## 3. MANDATORY RULE #3: Zero Dead Code, Zero Duplication & Clean Bounded Domains (`100% Rust`)
+| Component | Files | Status |
+| :--- | :--- | :--- |
+| Wire framing, AMF3, BabelCrypt DES, MD5 | `src/protocol.rs`, `src/amf3.rs`, `src/crypt.rs` | done (unit tests) |
+| HTTP/WS/TCP gateway, Flash policy | `src/gateway.rs`, `src/main.rs` | done, one OS thread per connection |
+| Web portal (login, register, GM, level, fix) | `src/portal.rs`, `web/src/App.tsx` | works; session cookie is the raw username (forgeable) and passwords are stored in plain text |
+| Data store | `src/data.rs` | in-memory `BTreeMap` rows with linear scans + whole-file AMF3 snapshot; to be replaced (see plan) |
+| RPC dispatch | `src/domain/mod.rs` | about 120 match arms, most return hard-coded values; unknown RPCs silently return `[]` (`src/domain/mod.rs:706`) |
+| Battle engine | `src/battle.rs`, `src/btstore.rs` | simplified placeholder: one flat formula, single target, no buffs; does not load the real skill table |
+| Gameplay domains | `src/domain/*.rs` | thin; most legacy modules not started |
+| Docker | `Dockerfile`, `docker-compose.yml` | broken: `CMD ["king-pirate"]` runs a demo that prints and exits (no `serve`), image has no `client-assets/`, the MariaDB service and `DATABASE_URL` are unused by the code |
+| `web/node_modules` | committed symlink | points to `/Users/phucnguyen/Dev/RentalCar/node_modules` (another project); `web/` cannot build on a fresh clone |
 
-1. **Compiler-Enforced Zero Dead Code (`rustc`):**
-   - `dead_code = "deny"`, `unused_imports = "deny"`, and `unused_variables = "deny"` are enforced in `Cargo.toml` and `src/main.rs`.
-2. **Zero Code Duplication (DRY Shared Primitives):**
-   - Always check the **Shared Primitives Registry** in `.agents/skills/porting-legacy-to-rust/SKILL.md` before writing any helper, byte parser, or struct.
-3. **Eliminate 785+ Legacy Dead Files & Collapse 7-File Ceremony into Clean Bounded Domains (`src/domain/<domain>.rs`):**
-   - Never port `exlib/Smarty-3.0.8`, `exlib/phpunit`, `script/*.script.php`, `cov/`, `.bak`, or `doc/`.
-   - Collapse `I<Module>` + `<Module>` + `En<Module>` + `<Module>Dao` + `<Module>Logic` + `<Module>Def` + `<Module>Conf` into `1` cohesive, strongly-typed Rust module per bounded domain (`src/domain/<domain>.rs`) for maximum `rustc` parallel codegen and maintainability (no artificial file-count cap).
+## 6. Lessons Log (add one entry when a rule is broken or a bug escapes)
 
----
-
-## 4. MANDATORY RULE #4: Strict Language Policy
-
-1. **100% English in Code, Comments, Docs, Rules & Skills:**
-   - All Rust files (`src/**/*.rs`), comments, docstrings, identifiers, commit messages, `GEMINI.md`, `REWRITE_PLAN.md`, `.agents/STATE.md`, `.agents/rules/*.md`, and `.agents/skills/**/SKILL.md` MUST be written **100% in English**.
-2. **Zero Chinese (`0%` CJK Characters):**
-   - Zero Chinese characters (`\u4e00-\u9fff`) are permitted anywhere in `/Users/phucnguyen/Dev/king-pirate`. Automated tests in `src/protocol.rs` enforce this on every `cargo test` run.
-3. **Vietnamese Reserved Strictly for Game Render UI:**
-   - Vietnamese is used **ONLY** for player-facing game UI rendering strings (never in Rust source code, code comments, rules, or skills).
-
----
-
-## 5. MANDATORY RULE #5: Keep-Up-To-Date (`keep-up-to-date.md`), Checkbox Guardrail & Git Phase-Push
-
-- **Every structural or code change MUST update in the SAME turn:**
-  1. `GEMINI.md` and `.agents/STATE.md` (with granular `- [ ]` / `- [x]` checkboxes for every task)
-  2. The **corresponding skill** in `.agents/skills/` (e.g. registering new primitives in `porting-legacy-to-rust/SKILL.md`)
-  3. The interactive Archify plan (`docs/rewrite-plan.html`) via `planning-with-archify` whenever plans/phases/checkboxes change
-  4. The Graphify + Obsidian Second Brain via `bash .agents/skills/updating-project-knowledge/scripts/sync-knowledge.sh`
-  5. **Phase-by-Phase Git Push (`https://github.com/farmer911/king-pirate-web-game.git`):** Push new Rust source code after each phase passes verification; **NEVER** push plan files (`REWRITE_PLAN.md`, `docs/`, `.archify/`, `.agents/STATE.md`, `graphify-out/`, `legacy-ref/`).
-
----
-
-## 6. MANDATORY RULE #6: Code-First Evidence, Empirical Verification & Zero Sycophancy (`07-evidence-based-truth-no-sycophancy.md`)
-
-1. **Always Speak With Code and Verified Evidence (`Code-First Communication`):**
-   - Never make abstract claims without citing exact source code (`file:line` with concrete snippets), binary inspection (`ldd`, `file`, `dwarfdump`), or empirical execution results (`cargo test`, `/usr/bin/time`).
-   - Explicitly state the underlying computer science / systems engineering principle alongside the code proof.
-2. **No Unverified Theory (`Mandatory Empirical Gate`):**
-   - Every claim about performance, security, or compatibility must be backed by direct code inspection in `legacy-ref/` / `src/` or a reproducible command execution.
-3. **Radical Transparency & Zero Sycophancy (`Truth Over Agreement`):**
-   - Never flatter, appease, or blindly agree with the user when a premise in the prompt contains a technical misconception or factual error.
-   - Explicitly separate what is **Technically TRUE** from what is **Technically FALSE / Misconceived**, backed by code evidence, and never hide trade-offs or security flaws.
-
----
-
-## 7. MANDATORY RULE #7: Peak Performance & Best Outcome First (`08-peak-performance-best-outcome.md`)
-
-1. **Supreme Priority (`Peak Performance & Engineering Excellence > Implementation Time > File Count`):**
-   - Implementation time and minimizing file count are **NOT** constraints. Always propose and build the highest-performance, lowest-latency (`p99`), and most scalable architecture.
-2. **Proactive Architecture Upgrade Mandate:**
-   - **In-Memory Player Actor (`PlayerSessionActor` per `uid`) + Write-Behind Persistence:** Keep hot player state (`User`, `Hero`, `Bag`, `Formation`, `Task`) in process RAM and flush dirty diffs (`userModify`) via `DataStore::apply_write_behind_delta` and AMF3 snapshot persistence (`data/pirate_store.amf3`).
-   - **Compile-Time / Zero-Allocation `#[repr(C)]` Static Store:** Convert `btstore` and `battle/data/*.csv` into contiguous `#[repr(C)]` tables with `O(1)` array index lookup (`0` runtime heap allocations).
-   - **100% Pure Native Rust Completion:** Port all active game domains into `src/domain/*.rs` wired directly into production `dispatch_client_rpc` with zero legacy PHP fallback remaining in production.
-
----
-
-## 8. Architecture & Component Inventory (`100% Rust`)
-
-| Component | Technology | Path | Status |
-| :--- | :--- | :--- | :--- |
-| **Rust Server Crate & Wire Protocol** | **Rust 1.99 (`edition = "2024"`, `#![deny(dead_code)]`, `0` external crates)** | `Cargo.toml`, `src/{main,protocol,amf3,crypt,actor,data,gateway,portal,btstore,battle}.rs`, `src/domain/*.rs`, `Dockerfile`, `docker-compose.yml` | ✅ Phase 1–9 Complete (`21/21` `cargo test` Pass + `4/4` Playwright E2E Pass) |
-| **React.js SPA Unified Shell (`t9-rxhzw-web` Option B)** | **React 19 + TypeScript (`web/src/App.tsx` -> `client-assets/portal/`) + Direct Ruffle WebAssembly Player + LouLx GM Tool + Pure REST API (`src/portal.rs`)** | `web/src/{App,main}.tsx`, `web/src/legacy.css`, `web/e2e/legacy-parity.spec.ts`, `/api/auth/*`, `/api/exchange/*`, `/api/gm/*`, `/api/{session,level,fix}` | ✅ 100% Legacy UI/UX Parity, Direct Ruffle Mount (`0` `<iframe>`), GM Tool & Zero `.php` Requests |
-| **In-Memory Actor + Snapshot Storage** | **In-Memory `PlayerSessionActor` + `RwLock<BTreeMap>` `DataStore` (`data/pirate_store.amf3`)** | `REWRITE_PLAN.md` (Section 5–7), `docs/rewrite-plan.html` | ✅ Forensic Code & Security Verified |
-| **Forensic Investigation & Rust Plan** | **Markdown + Archify Interactive HTML** | `REWRITE_PLAN.md`, `.agents/STATE.md`, `docs/rewrite-plan.html` | ✅ 100% Ground-Truth Verified |
-| **Legacy Ground-Truth Corpus** | **PHP 5.5 + XML + DWARF C++ Headers + SQL Schema** | `legacy-ref/` (`legacy-ref/www/*.php`) | ✅ Extracted & Sanitized (`0` CJK chars) |
-| **Second Brain (Graphify MCP + Obsidian)** | **NetworkX + Obsidian Markdown Vault + Graphify MCP** | `graphify-out/GRAPH_REPORT.md`, `graphify-out/obsidian/` | ✅ Initialized & Synced |
-| **Agent Rules (`always_on`)** | **10 Enforced Rules** | `.agents/rules/{01..05,07-evidence-based-truth-no-sycophancy,08-peak-performance-best-outcome,09-mandatory-planning-and-zero-fabrication-guardrail,10-playwright-e2e-and-legacy-differential-evidence,keep-up-to-date}.md` | ✅ Active (`always_on`) |
-| **TDD Skills (`obra/superpowers`)** | **12 TDD Skills (100% English, including `honesty` & `playwright-e2e-evidence`)** | `.agents/skills/{honesty,playwright-e2e-evidence,empirical-metrics-and-knowledge-tools,zero-defect-real-runtime-verification,engineering-audit-gate,simplify,porting-legacy-to-rust,updating-project-knowledge,planning-with-archify,test-driven-development,writing-skills,verification-before-completion}/SKILL.md` | ✅ Verified (`RED -> GREEN -> REFACTOR`) |
-
----
-
-## 9. Lessons Learned Log (`Rule 02` Continuous Learning Loop)
-
-- **[2026-11-06] Stale Daemon Binary (`cargo test` vs `cargo build`) & Incomplete Post-Creation Verification:**
-  - *Where:* Launching `./target/debug/king-pirate serve` after editing `src/gateway.rs` (`PUBLIC_RPC_CLASSES` adding `payback`) and `src/domain/mod.rs` (`city.checkEnter -> true`).
-  - *How & Why:* Running `cargo check && cargo test` only compiled the test harness binary (`target/debug/deps/king_pirate-*`), leaving `target/debug/king-pirate` stale without `payback` in `PUBLIC_RPC_CLASSES`. When the user created a character, `Main.swf` called `payback.getCurAvailablePayBackIds`, which the stale binary rejected with `close: undefined method`, disconnecting the socket at the map loading bar.
-  - *Prevention:* Always run `cargo build` before launching `./target/debug/king-pirate serve`, and always click the Start Game button in real Chrome to verify the character enters the Town Map with `0` disconnect dialogs.
-- **[2026-11-06] Never Bypass Legacy Web Portal (`t9-rxhzw-web` Register, Login, Member Center, Server Selection):**
-  - *Where:* `src/gateway.rs:394-403` previously redirected `GET /` directly to `/T9NuoYa/T9NuoYa.html?sid=202621270`.
-  - *How & Why:* Took a shortcut by skipping the legacy `t9-rxhzw-web` portal (`client-assets/index.php`, `member.php`, `core/Cx_Ajax.php`, `app/Game/{index,game}.php`, `app/dh/{index,ajax}.php`, `t9-rxhzw-web-schema.sql`).
-  - *Prevention:* Ported the complete legacy web portal into `src/portal.rs` backed by `DataStore` (`t_account` with `AUTO_INCREMENT = 202621271` and `dj = 1,000,000,000` per `core/config.php:14`, plus `t_server`).
-- **[2026-11-06] Strict Ground-Truth Constants (`User.cfg.php`) & AS3 Return Payloads (`growupplan`, `charity`, `elves`):**
-  - *Where:* `src/actor.rs:72`, `src/domain/user.rs:244`, and `src/domain/mod.rs:140-175`.
-  - *How & Why:* Used `cur_execution = 100` instead of `UserConf::INIT_EXECUTION = 100000` (`User.cfg.php:188`), failed to load `vip` and `cur_execution` in `rpc_user_character_login`, and returned generic `{}` for `growupplan.getInfo`, `charity.getCharityInfo`, and `elves.get` (causing 3 AS3 `TypeError: Error #1010` logs in Ruffle).
-  - *Prevention:* Enforced `INIT_EXECUTION = 100_000` and `INIT_VIP = 9` in `src/actor.rs` and `src/domain/user.rs`, and implemented exact PHP ground-truth return payloads for `growupplan.getInfo` (`-1`), `charity.getCharityInfo` (`va_charity_info.val_ret`), and `elves.get` (`va_elves`).
-- **[2026-11-06] Browser Disk Cache Serving Stale `.php` Binary Downloads (`max-age=3600`) & Custom UI Fabrication:**
-  - *Where:* `src/gateway.rs:495` (`Cache-Control: public, max-age=3600` on static files when `client-assets/member.php` existed on disk) and `src/portal.rs` (custom dark-blue HTML UI instead of legacy `t9-rxhzw-web` UI/UX).
-  - *How & Why:* Before `src/portal.rs` intercepted `/member.php`, `src/gateway.rs` served `client-assets/member.php` (`10.9 KB`) as `application/octet-stream` with `max-age=3600`, causing the user's Chrome browser to cache `/member.php` as a downloadable file for 60 minutes. Furthermore, `src/portal.rs` invented a dark-blue UI instead of following `legacy-ref/www/{index,member,level,fix}.php`.
-  - *Prevention:* Moved all `.php` files out of `client-assets/` into `legacy-ref/www/`, added `test_mandatory_guardrail_and_zero_php_leak` in `src/protocol.rs`, sent `Clear-Site-Data: "cache"` + `Cache-Control: no-store` on portal routes, and migrated the legacy PHP portal to React.js (`web/src/App.tsx`) preserving 100% of the legacy Pintuer + `my.css` layout and Layer Modals.
+- **2026-11-06 Stale binary.** `cargo test` does not rebuild `target/debug/king-pirate`; a stale binary rejected `payback.getCurAvailablePayBackIds` and disconnected the client at the loading bar. Prevention: `cargo build` before `serve`.
+- **2026-11-06 Skipped legacy portal.** `GET /` redirected straight into the game, bypassing register/login/server select. Prevention: port the legacy portal pages (`legacy-ref/www/`) 1:1.
+- **2026-11-06 Wrong constants.** `cur_execution = 100` was used instead of `UserConf::INIT_EXECUTION = 100000` (`User.cfg.php:188`); generic `{}` returns caused AS3 `TypeError #1010`. Prevention: copy constants and return shapes from `legacy-ref/` with a citation.
+- **2026-11-06 Cached `.php` downloads.** Static serving of `client-assets/member.php` with `max-age=3600` made Chrome cache it as a download. Prevention: no `.php` in `client-assets/` (checked by `cargo test`), `Cache-Control: no-store` on portal routes.
+- **2026-11-06 Rules ignored.** 10 always-on rules and 12 skills (103,844 bytes with GEMINI.md, 77 "MUST/NEVER/ALWAYS/ZERO"-style absolutes) contradicted each other (e.g. "zero external crates" vs "flush to MariaDB"; the rule banning unmeasured numbers sat next to Rule 08, which itself quoted an unmeasured nanosecond figure), required tools that only exist on one Mac (Graphify before every read, Archify, `/Users/phucnguyen/...`), and one skill carried another project's commands (RentalCar `bun run typecheck`). The agent could not satisfy all of them, so it satisfied none reliably. Prevention: one short always-on file with a priority order (`00-core.md`), skills routed by a table, and `cargo test` asserting only one always-on rule exists.
