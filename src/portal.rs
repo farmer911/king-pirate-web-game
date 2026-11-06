@@ -216,12 +216,10 @@ const REACT_PORTAL_SHELL_HTML: &str = r#"<!DOCTYPE html>
 </html>
 "#;
 
-/// Serve the React.js portal HTML with cache-clearing headers so Chrome never replays stale `.php` downloads.
-fn portal_react_shell(clear_cache: bool, extra_comment: &str) -> PortalHttpResponse {
-    let mut extra_headers = Vec::new();
-    if clear_cache {
-        extra_headers.push(r#"Clear-Site-Data: "cache""#.to_string());
-    }
+/// Serve the React.js portal HTML. The gateway sends it with `no-store`; game assets stay cached
+/// (a `Clear-Site-Data: "cache"` header here used to wipe them on every page view).
+fn portal_react_shell(extra_comment: &str) -> PortalHttpResponse {
+    let extra_headers = Vec::new();
     let html = if extra_comment.is_empty() {
         REACT_PORTAL_SHELL_HTML.to_string()
     } else {
@@ -305,7 +303,7 @@ pub fn try_handle_portal_route(
         "/api/fix" => Some(handle_fix_api(&form, store, persist_path)),
         "/api/gm/info" => Some(handle_gm_info(store)),
         "/api/gm/execute" => Some(handle_gm_execute(&form, store, persist_path)),
-        "/admin_loulxgame" | "/admin_loulxgame/" => Some(portal_react_shell(true, "gm_tool")),
+        "/admin_loulxgame" | "/admin_loulxgame/" => Some(portal_react_shell("gm_tool")),
         "/core/Cx_Ajax.php" => {
             let action = query
                 .get("Action")
@@ -338,14 +336,14 @@ pub fn try_handle_portal_route(
             if method.eq_ignore_ascii_case("POST") {
                 Some(handle_level_api(&form, store, persist_path))
             } else {
-                Some(portal_react_shell(true, "level.php"))
+                Some(portal_react_shell("level.php"))
             }
         }
         "/fix.php" => {
             if method.eq_ignore_ascii_case("POST") {
                 Some(handle_fix_api(&form, store, persist_path))
             } else {
-                Some(portal_react_shell(true, "fix.php"))
+                Some(portal_react_shell("fix.php"))
             }
         }
         "/app/Game/game.php" => {
@@ -355,7 +353,7 @@ pub fn try_handle_portal_route(
                 .and_then(|acc| acc.get("id").and_then(|v| v.as_i64()))
                 .unwrap_or(202_621_271);
             let comment = format!("iframe:/T9NuoYa/T9NuoYa.html?sid={pid}");
-            Some(portal_react_shell(false, &comment))
+            Some(portal_react_shell(&comment))
         }
         "/"
         | "/index.php"
@@ -365,7 +363,7 @@ pub fn try_handle_portal_route(
         | "/app/sys/editpass.php"
         | "/app/sys/findpass.php"
         | "/app/Game/index.php"
-        | "/app/dh/index.php" => Some(portal_react_shell(true, clean_path)),
+        | "/app/dh/index.php" => Some(portal_react_shell(clean_path)),
         _ => None,
     }
 }
@@ -474,7 +472,6 @@ pub fn handle_cx_ajax(
                 r#"{"info":"\u0110\u0103ng k\u00fd th\u00e0nh c\u00f4ng, chuy\u1ec3n sang trung t\u00e2m th\u00e0nh vi\u00ean!!","status":"y","url":"/member.php"}"#.to_string(),
                 vec![
                     format!("Set-Cookie: kp_account={uname}; Path=/; SameSite=Lax"),
-                    r#"Clear-Site-Data: "cache""#.to_string(),
                 ],
             )
         }
@@ -501,7 +498,6 @@ pub fn handle_cx_ajax(
                 r#"{"info":"\u0110\u0103ng nh\u1eadp th\u00e0nh c\u00f4ng, chuy\u1ec3n \u0111\u1ebfn trung t\u00e2m th\u00e0nh vi\u00ean!!","status":"y","url":"/member.php"}"#.to_string(),
                 vec![
                     format!("Set-Cookie: kp_account={uname}; Path=/; SameSite=Lax"),
-                    r#"Clear-Site-Data: "cache""#.to_string(),
                 ],
             )
         }
@@ -583,7 +579,6 @@ pub fn handle_cx_ajax(
             r#"{"info":"Ng\u01b0\u1eddi d\u00f9ng \u0111\u00e3 tho\u00e1t kh\u1ecfi h\u1ec7 th\u1ed1ng th\u00e0nh c\u00f4ng!","status":"y","url":"/index.php"}"#.to_string(),
             vec![
                 "Set-Cookie: kp_account=; Path=/; Max-Age=0".to_string(),
-                r#"Clear-Site-Data: "cache""#.to_string(),
             ],
         ),
         _ => json_ok(
@@ -1166,7 +1161,7 @@ mod tests {
         assert!(reg_resp
             .extra_headers
             .iter()
-            .any(|h| h.contains(r#"Clear-Site-Data: "cache""#)));
+            .all(|h| !h.contains("Clear-Site-Data")));
 
         // Verify `account.id` starts at `202621271` (`t9-rxhzw-web-schema.sql:37`) and `dj = 1_000_000_000`
         let acc = find_account_by_name(&store, "luffy2026").expect("account must exist");

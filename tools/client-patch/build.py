@@ -85,12 +85,20 @@ s = rep(s, '''         if(this._isPackage)
             if(_loc3_ != null)
             {
                delete this.filePool[_loc2_];
-               this.xmlPool[_loc2_] = new XML(_loc3_.content);
+               this.xmlPool[_loc2_] = new XML(_loc3_.content);%s
                _loc3_.setContent(null,false);
             }
             return this.xmlPool[_loc2_];
          }
          return Core.dataLib.getXML''')
+PARSE = '''               delete this.filePool[_loc2_];
+               this.xmlPool[_loc2_] = new XML(_loc3_.content);%s'''
+s = rep(s, PARSE, PARSE.replace('%s', '') if not TRACE else '''               var _kpx:int = getTimer();
+               delete this.filePool[_loc2_];
+               this.xmlPool[_loc2_] = new XML(_loc3_.content);
+               ExternalInterface.call("console.log","KPX " + _loc2_ + " " + (getTimer() - _kpx));''')
+if TRACE:
+    s = add_imports(s, 'flash.external.ExternalInterface', 'flash.utils.getTimer')
 s = rep(s, '''      public function clearXml(param1:String) : void''', '''      public function getRaw(param1:String) : String
       {
          var _loc2_:FZipFile = this.filePool[param1.toLowerCase()];

@@ -510,18 +510,27 @@ pub fn handle_http_stream_with_store(
         return stream.flush();
     }
 
-    let content = std::fs::read(&full_path)?;
     let mime = mime_type_for_path(rel_path);
     let cache_ctrl = if rel_path.starts_with("portal/") {
         "no-store, no-cache, must-revalidate, max-age=0"
     } else {
         "public, max-age=3600"
     };
+    let etag = asset_etag(&std::fs::metadata(&full_path)?);
+    if is_not_modified(headers_part, &etag) {
+        let hdr = format!(
+            "HTTP/1.1 304 Not Modified\r\nETag: {etag}\r\nCache-Control: {cache_ctrl}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+        );
+        stream.write_all(hdr.as_bytes())?;
+        return stream.flush();
+    }
+    let content = std::fs::read(&full_path)?;
     let hdr = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: {}\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: {}\r\nETag: {}\r\nConnection: close\r\n\r\n",
         mime,
         content.len(),
-        cache_ctrl
+        cache_ctrl,
+        etag
     );
     stream.write_all(hdr.as_bytes())?;
     if method != "HEAD" {
@@ -530,10 +539,42 @@ pub fn handle_http_stream_with_store(
     stream.flush()
 }
 
+/// Validator for static assets: size and modification time, so an expired cache entry is
+/// revalidated with a body-less 304 instead of a full download (game assets total tens of MB).
+fn asset_etag(meta: &std::fs::Metadata) -> String {
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_secs());
+    format!("\"{:x}-{:x}\"", meta.len(), mtime)
+}
+
+/// True when the request's `If-None-Match` lists `etag` (or `*`).
+fn is_not_modified(headers_part: &str, etag: &str) -> bool {
+    headers_part.lines().any(|line| {
+        line.split_once(':').is_some_and(|(name, value)| {
+            name.trim().eq_ignore_ascii_case("if-none-match")
+                && value.split(',').any(|v| {
+                    let v = v.trim();
+                    v == "*" || v.trim_start_matches("W/") == etag
+                })
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn test_if_none_match_revalidates_assets() {
+        let req = "GET /T9NuoYa/Main.swf HTTP/1.1\r\nHost: x\r\nIf-None-Match: W/\"a-1\", \"6-2\"";
+        assert!(is_not_modified(req, "\"6-2\""));
+        assert!(!is_not_modified(req, "\"6-3\""));
+        assert!(!is_not_modified("GET / HTTP/1.1\r\nHost: x", "\"6-2\""));
+    }
 
     #[test]
     fn test_rpc_access_guard_blocks_private_and_unauthenticated_calls() {
