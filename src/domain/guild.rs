@@ -47,6 +47,10 @@ pub fn contribute_belly(
     guild: &mut GuildRecord,
     belly_amount: i64,
 ) -> Amf3Value {
+    // A negative amount would pay the player instead of charging them.
+    if belly_amount <= 0 {
+        return Amf3Value::String("err".to_string());
+    }
     if !actor.add_belly(-belly_amount) {
         return Amf3Value::String("no_belly".to_string());
     }

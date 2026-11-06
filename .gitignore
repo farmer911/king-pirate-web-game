@@ -6,6 +6,8 @@ web/test-results/
 web/playwright-report/
 .env
 *.log
+# Recorded legacy traffic is a test fixture, not a log
+!tests/fixtures/sessions/*.log
 *.pid
 .DS_Store
 

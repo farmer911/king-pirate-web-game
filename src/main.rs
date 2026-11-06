@@ -11,6 +11,7 @@ pub mod domain;
 pub mod gateway;
 pub mod portal;
 pub mod protocol;
+pub mod recorder;
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -41,25 +42,9 @@ pub fn process_stream_buffer(
             responses.push(gateway::FLASH_POLICY_RESPONSE.to_vec());
             continue;
         }
-        if recv_buf.len() < protocol::HEAD_SIZE {
+        let Some(total_len) = gateway::frame_len(recv_buf)? else {
             break;
-        }
-        let mut hdr_bytes = [0u8; protocol::HEAD_SIZE];
-        hdr_bytes.copy_from_slice(&recv_buf[..protocol::HEAD_SIZE]);
-        let hdr = protocol::FrameHeader::decode(&hdr_bytes);
-        let body_len = hdr.body_size as usize;
-        if body_len > 4 * 1024 * 1024 {
-            return Err("frame body_size exceeds 4MB safety limit");
-        }
-        let sig_len = if (hdr.flag & protocol::FLAG_ENCRYPTED) != 0 {
-            16
-        } else {
-            0
         };
-        let total_len = protocol::HEAD_SIZE + sig_len + body_len;
-        if recv_buf.len() < total_len {
-            break;
-        }
         let frame: Vec<u8> = recv_buf.drain(..total_len).collect();
         let (_hdr, req_val) = match gateway::decode_framed_packet(&frame) {
             Ok(v) => v,
@@ -109,17 +94,7 @@ fn handle_ws_client(
     store: Arc<data::DataStore>,
     persist_path: PathBuf,
 ) {
-    let mut hs_buf = [0u8; 4096];
-    let n = match stream.read(&mut hs_buf) {
-        Ok(n) if n > 0 => n,
-        _ => return,
-    };
-    let req_str = String::from_utf8_lossy(&hs_buf[..n]);
-    let Some(ws_key) = gateway::parse_websocket_key(&req_str) else {
-        return;
-    };
-    let upgrade = gateway::build_websocket_upgrade_response(&ws_key);
-    if stream.write_all(&upgrade).is_err() || stream.flush().is_err() {
+    if !gateway::accept_websocket(&mut stream) {
         return;
     }
 
@@ -196,6 +171,7 @@ pub fn run_live_daemon(
     tcp_addr: &str,
     assets_root: PathBuf,
     persist_path: PathBuf,
+    upstream: Option<String>,
 ) -> std::io::Result<()> {
     let store = Arc::new(data::DataStore::new(data::SqlDialect::SqliteWal));
     if persist_path.is_file() {
@@ -217,11 +193,16 @@ pub fn run_live_daemon(
 
     let store_ws = Arc::clone(&store);
     let persist_ws = persist_path.clone();
+    let upstream_ws = upstream.clone();
     std::thread::spawn(move || {
         for incoming in ws_listener.incoming().flatten() {
             let st = Arc::clone(&store_ws);
             let pp = persist_ws.clone();
-            std::thread::spawn(move || handle_ws_client(incoming, st, pp));
+            let up = upstream_ws.clone();
+            std::thread::spawn(move || match up {
+                Some(u) => recorder::proxy_connection(incoming, &u, true, Path::new(recorder::SESSION_DIR)),
+                None => handle_ws_client(incoming, st, pp),
+            });
         }
     });
 
@@ -231,7 +212,11 @@ pub fn run_live_daemon(
         for incoming in tcp_listener.incoming().flatten() {
             let st = Arc::clone(&store_tcp);
             let pp = persist_tcp.clone();
-            std::thread::spawn(move || handle_tcp_client(incoming, st, pp));
+            let up = upstream.clone();
+            std::thread::spawn(move || match up {
+                Some(u) => recorder::proxy_connection(incoming, &u, false, Path::new(recorder::SESSION_DIR)),
+                None => handle_tcp_client(incoming, st, pp),
+            });
         }
     });
 
@@ -247,8 +232,17 @@ pub fn run_live_daemon(
     Ok(())
 }
 
-/// Always starts the server. Arguments are ignored, so the old `king-pirate serve` still works.
+/// Starts the server. `king-pirate record [--upstream <host:port>]` forwards game connections to a legacy
+/// lcserver and records them (see `recorder`); any other argument (e.g. the old `serve`) is ignored.
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let upstream = (args.get(1).map(String::as_str) == Some("record")).then(|| {
+        args.iter()
+            .skip_while(|a| *a != "--upstream")
+            .nth(1)
+            .cloned()
+            .unwrap_or_else(|| recorder::DEFAULT_UPSTREAM.to_string())
+    });
     let assets_root = std::env::var("KING_PIRATE_ASSETS")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("client-assets"));
@@ -261,6 +255,7 @@ fn main() {
         "0.0.0.0:8002",
         assets_root,
         persist_path,
+        upstream,
     ) {
         eprintln!("Fatal daemon error: {}", err);
         std::process::exit(1);
