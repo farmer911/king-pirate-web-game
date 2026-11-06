@@ -4,13 +4,14 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "mkdir -p ../client-assets/portal && bun build ./src/main.tsx --outdir ../client-assets/portal --entry-naming app.js --minify && cp ./src/legacy.css ../client-assets/portal/legacy.css"
+    "build": "mkdir -p ../client-assets/portal && bun build ./src/main.tsx --outdir ../client-assets/portal --entry-naming app.js --minify && cp ./src/legacy.css ../client-assets/portal/legacy.css && mkdir -p ../client-assets/T9NuoYa/ruffle && cp node_modules/@ruffle-rs/ruffle/*.js node_modules/@ruffle-rs/ruffle/*.wasm ../client-assets/T9NuoYa/ruffle/"
   },
   "dependencies": {
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.65.0"
+    "@playwright/test": "^1.65.0",
+    "@ruffle-rs/ruffle": "0.7.1"
   }
 }

@@ -24,7 +24,7 @@ Port one legacy RPC (or one formula) at a time. A port is done only when the Rus
 ## Workflow (one RPC per cycle)
 
 1. **Find it.** Locate `<class>.<method>` in `legacy-ref/rpcfw/module/`. Read the entry method, then follow calls into `Logic`/`Dao` only as far as needed. Note: args, tables read/written, `userModify` fields, return shape.
-2. **Get a fixture.** Use a recorded request/response pair from legacy traffic (`tests/fixtures/<class>.<method>.*`). If none exists, write down that the parity check is missing; do not invent the expected output.
+2. **Get a fixture.** Find the request and its legacy reply in `tests/fixtures/sessions/*.log` (grep `# <class>.<method>`; the next `s2c` line is the reply). No recording yet? Record one: start the oracle (`docker compose -f tools/legacy-oracle/compose.yml up -d`), run `cargo run -- record`, play the feature. Never invent the expected output.
 3. **RED.** Add a `#[test]` that feeds the fixture through `dispatch_client_rpc` and asserts the legacy response. Run `cargo test` and see it fail.
 4. **GREEN.** Implement in `src/domain/<domain>.rs`, wired into `dispatch_client_rpc`. Doc-comment each formula and constant with its `legacy-ref/<path>:<line>`.
 5. **Verify.** `cargo test` passes. Remove the `// STUB:` marker and tick the RPC in `REWRITE_PLAN.md`.
@@ -47,8 +47,9 @@ Port one legacy RPC (or one formula) at a time. A port is done only when the Rus
 | Crypto & auth | `src/crypt.rs` | `md5_digest`, `md5_hex`, `sha1_digest`, `base64_encode`, `websocket_accept_key`, `phpproxy_checksum`, `babel_encrypt_number`, `babel_decrypt_number`, `compute_login_play_hash`, `verify_login_request` |
 | Player actor | `src/actor.rs` | `UPPER_LIMIT_BELLY`, `PlayerSessionActor`, `PlayerDirtyDelta`, `add_belly`, `add_gold`, `add_prestige`, `add_execution`, `add_fight_cdtime`, `move_in_town`, `take_dirty_delta` |
 | Data store | `src/data.rs` | `ColumnValue::{as_i64,as_str}`, `UpdateOp`, `WhereCond`, `IdGenerator::next_id`, `DataStore::{insert_or_update,select,select_count,update,delete,apply_write_behind_delta,save_to_disk,load_from_disk}` |
+| Traffic recorder | `src/recorder.rs` | `SESSION_DIR`, `DEFAULT_UPSTREAM`, `Dir`, `SessionLog::{new,feed}`, `proxy_connection` |
 | RPC access lists | `src/access_list.rs` (generated) | `AccessList`, `PRIVATE_METHODS`, `EXCLUDE_CONNECT_METHODS`, `EXCLUDE_LOGIN_METHODS`, `PUBLIC_METHODS` |
-| Gateway | `src/gateway.rs` | `FLASH_POLICY_REQUEST`, `FLASH_POLICY_RESPONSE`, `ConnectionSession`, `MethodAccessTier`, `classify_method`, `authorize_rpc_call`, `encode_framed_packet`, `decode_framed_packet`, `encode_babeltime_response`, `encode_babeltime_response_with_modify`, `parse_websocket_key`, `read_ws_frame`, `write_ws_frame`, `render_game_launcher_html`, `handle_http_stream_with_store` |
+| Gateway | `src/gateway.rs` | `FLASH_POLICY_REQUEST`, `FLASH_POLICY_RESPONSE`, `ConnectionSession`, `MethodAccessTier`, `classify_method`, `authorize_rpc_call`, `encode_framed_packet`, `decode_framed_packet`, `frame_len`, `accept_websocket`, `encode_babeltime_response`, `encode_babeltime_response_with_modify`, `parse_websocket_key`, `read_ws_frame`, `write_ws_frame`, `render_game_launcher_html`, `handle_http_stream_with_store` |
 | Web portal | `src/portal.rs`, `web/src/App.tsx` | `INITIAL_ACCOUNT_DJ`, `GOLD_EXCHANGE_RATIO`, `LEVEL_STEP_EXP`, `calculate_all_exp`, `try_handle_portal_route`, `handle_api_session`, `handle_cx_ajax`, `handle_dh_ajax`, `handle_level_api`, `handle_fix_api`, `handle_gm_info`, `handle_gm_execute` |
 | Static game store | `src/btstore.rs` | `RawSkill`, `RawBuffer`, `RawTarget`, `StaticBtstore::{new_baseline,load_skills_csv,get_skill,get_buffer,get_target}` |
 | Combat engine | `src/battle.rs` | `HeroUnit`, `FormationGrid`, `ReactionRecord`, `ActionRecord`, `BattleResult::to_amf3`, `compute_skill_damage`, `execute_battle_do_hero` |

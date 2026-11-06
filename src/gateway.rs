@@ -188,6 +188,22 @@ pub fn encode_babeltime_response_with_modify(
 /// Decode a framed packet and verify its 16-byte MD5 XOR checksum if byte 4 (`(flag & 0xFF00_0000) != 0`) is set.
 /// Accepts both `0x0100_0000` (`BabelTimeSocket.as` `writeBoolean(true)`) and `0xFF00_0000` (`PHPProxy`),
 /// and validates against either `MESS_CODE_PRIMARY` (`BabelTime`) or `MESS_CODE_SECONDARY` (`4bd4ace59`).
+/// Total length of the first complete frame in `buf`: 8-byte header, a 16-byte signature when
+/// `FLAG_ENCRYPTED` is set, then the body. `Ok(None)` while more bytes are needed.
+pub fn frame_len(buf: &[u8]) -> Result<Option<usize>, &'static str> {
+    let Some(hdr_bytes) = buf.first_chunk::<HEAD_SIZE>() else {
+        return Ok(None);
+    };
+    let hdr = FrameHeader::decode(hdr_bytes);
+    let body_len = hdr.body_size as usize;
+    if body_len > 4 * 1024 * 1024 {
+        return Err("frame body_size exceeds 4MB safety limit");
+    }
+    let sig_len = if (hdr.flag & FLAG_ENCRYPTED) != 0 { 16 } else { 0 };
+    let total_len = HEAD_SIZE + sig_len + body_len;
+    Ok((buf.len() >= total_len).then_some(total_len))
+}
+
 pub fn decode_framed_packet(frame: &[u8]) -> Result<(FrameHeader, Amf3Value), &'static str> {
     if frame.len() < HEAD_SIZE {
         return Err("frame shorter than 8-byte header");
@@ -236,6 +252,20 @@ pub fn parse_websocket_key(http_req: &str) -> Option<String> {
 }
 
 /// Build an RFC 6455 `101 Switching Protocols` response for a given `Sec-WebSocket-Key`.
+/// Read the HTTP upgrade request on `stream` and answer it. `false` if it was not a WebSocket upgrade.
+pub fn accept_websocket(stream: &mut TcpStream) -> bool {
+    let mut buf = [0u8; 4096];
+    let n = match stream.read(&mut buf) {
+        Ok(n) if n > 0 => n,
+        _ => return false,
+    };
+    let Some(key) = parse_websocket_key(&String::from_utf8_lossy(&buf[..n])) else {
+        return false;
+    };
+    let upgrade = build_websocket_upgrade_response(&key);
+    stream.write_all(&upgrade).is_ok() && stream.flush().is_ok()
+}
+
 pub fn build_websocket_upgrade_response(sec_ws_key: &str) -> Vec<u8> {
     let accept = websocket_accept_key(sec_ws_key);
     format!(

@@ -444,37 +444,14 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
-        // STUB: WRONG ARGS: legacy is receiveItem($gid, $item_id) moving an item out of the temp bag (legacy-ref/rpcfw/module/bag/Bag.class.php:854); here args are read as (template_id, count), so a client can create any item
-        ("bag", "receiveItem") => {
-            let tmpl_id = args.first().and_then(|v| v.as_i64()).unwrap_or(10001) as u32;
-            let count = args.get(1).and_then(|v| v.as_i64()).unwrap_or(1) as u32;
-            let uid = session.uid.unwrap_or(20001) as i64;
-            let mut pbag = load_player_bag_from_store(store, uid);
-            if let Ok(gid) = pbag.add_item(store, tmpl_id, count) {
-                if let Some(it) = pbag.grids.get(&gid) {
-                    let mut bag_row = BTreeMap::new();
-                    bag_row.insert("bag_key".to_string(), ColumnValue::Int(uid * 1000 + gid as i64));
-                    bag_row.insert("uid".to_string(), ColumnValue::Int(uid));
-                    bag_row.insert("gid".to_string(), ColumnValue::Int(gid as i64));
-                    bag_row.insert("item_id".to_string(), ColumnValue::Int(it.item_id as i64));
-                    bag_row.insert(
-                        "item_template_id".to_string(),
-                        ColumnValue::Int(it.item_template_id as i64),
-                    );
-                    bag_row.insert("item_num".to_string(), ColumnValue::Int(it.item_num as i64));
-                    bag_row.insert(
-                        "reinforce_level".to_string(),
-                        ColumnValue::Int(it.reinforce_level as i64),
-                    );
-                    store.insert_or_update("t_bag", "bag_key", bag_row, false);
-                }
-            }
-            pbag.to_amf3()
-        }
-        // STUB: fake item record (template 10001); cost/amount comes from client args (cheatable)
+        // STUB: there is no temp bag yet, so every call takes legacy's "item not in the temp bag"
+        // path: `receiveItem($gid, $item_id)` returns `array()` (legacy-ref/rpcfw/module/bag/Bag.class.php:854-858).
+        ("bag", "receiveItem") => Amf3Value::dense_list([]),
+        // STUB: fake item record (template 10001); fixed belly cost 200 not from legacy.
+        // Legacy args are `reinforce($item_id, $special)` (legacy-ref/rpcfw/module/forge/IForge.class.php:114).
         ("forge", "reinforce") => {
             let item_id = args.first().and_then(|v| v.as_i64()).unwrap_or(1000001) as u64;
-            let cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(200);
+            let cost = 200;
             if let Some(actor) = actor_slot.as_mut() {
                 let mut item = bag::BagItem {
                     item_id,
@@ -487,10 +464,11 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
-        // STUB: cost/amount comes from client args (cheatable)
+        // STUB: fixed prestige cost 10 not from legacy. Legacy args are `recruit($htid)`
+        // (legacy-ref/rpcfw/module/hero/IHero.class.php:121) and `addPrestigeHero($htid)` (:47).
         ("hero", "recruit" | "addPrestigeHero") => {
             let htid = args.first().and_then(|v| v.as_i64()).unwrap_or(101) as u32;
-            let cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(10);
+            let cost = 10;
             if let Some(actor) = actor_slot.as_mut() {
                 match hero::recruit_hero(actor, store, htid, cost) {
                     Ok(rec) => rec.to_amf3(),
@@ -500,10 +478,11 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
-        // STUB: fake hero record; cost/amount comes from client args (cheatable)
+        // STUB: fake hero record (htid 101); fixed gold cost 5 not from legacy. Legacy args are
+        // `addGoodwillByGold($hid)` (legacy-ref/rpcfw/module/hero/IHero.class.php:386).
         ("hero", "addGoodwillByGold") => {
-            let htid = args.first().and_then(|v| v.as_i64()).unwrap_or(101) as u32;
-            let gold_cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(5);
+            let htid = 101;
+            let gold_cost = 5;
             if let Some(actor) = actor_slot.as_mut() {
                 let mut rec = hero::HeroRecord {
                     hid: actor.master_hid,
@@ -525,9 +504,10 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
-        // STUB: fake hero record (htid 101); cost/amount comes from client args (cheatable)
+        // STUB: fake hero record (htid 101); fixed belly cost 100 not from legacy. Legacy args are
+        // `trial($type)` / `allGoldTrial($type)` (legacy-ref/rpcfw/module/haki/IHaki.class.php:9-13).
         ("haki", "trial" | "allGoldTrial") => {
-            let belly_cost = args.first().and_then(|v| v.as_i64()).unwrap_or(100);
+            let belly_cost = 100;
             if let Some(actor) = actor_slot.as_mut() {
                 let mut rec = hero::HeroRecord {
                     hid: actor.master_hid,
@@ -602,10 +582,11 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
-        // STUB: fake boss state; damage comes from client args (cheatable)
+        // STUB: fake boss state; fixed damage 2500 instead of a battle. Legacy args are
+        // `attack($boss_id)` (legacy-ref/rpcfw/module/boss/IBoss.class.php:108).
         ("boss" | "guildboss", "attack") | ("randomboss", "attackBoss") => {
             let boss_id = args.first().and_then(|v| v.as_i64()).unwrap_or(1) as u32;
-            let dmg = args.get(1).and_then(|v| v.as_i64()).unwrap_or(2500);
+            let dmg = 2500;
             if let Some(actor) = actor_slot.as_mut() {
                 let mut boss_state = boss::WorldBossState::new(boss_id, 50, 10000);
                 boss_state.attack_boss(actor, dmg)
@@ -629,7 +610,8 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
-        // STUB: fake guild record; cost/amount comes from client args (cheatable)
+        // STUB: fake guild record; contributeGold spends belly instead of gold. The amount is a real
+        // client arg (legacy-ref/rpcfw/module/guild/IGuild.class.php:269-282); `contribute_belly` rejects amounts <= 0.
         ("guild", "contributeBelly" | "contributeGold") => {
             let amount = args.first().and_then(|v| v.as_i64()).unwrap_or(200);
             if let Some(actor) = actor_slot.as_mut() {
@@ -645,10 +627,11 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
-        // STUB: fake pet record; cost/amount comes from client args (cheatable)
+        // STUB: fake pet record; fixed exp 150 and belly cost 100 not from legacy. Legacy args are
+        // `train($petID)` / `feedingOnce($petID, $itemTID)` (legacy-ref/rpcfw/module/pet/IPet.class.php:163, :277).
         ("pet", "train" | "feedingOnce") | ("riding", "train") => {
-            let exp_gain = args.first().and_then(|v| v.as_i64()).unwrap_or(150) as u32;
-            let belly_cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(100);
+            let exp_gain = 150;
+            let belly_cost = 100;
             if let Some(actor) = actor_slot.as_mut() {
                 let mut pet_rec = pet::PetRecord {
                     pet_id: 1,
@@ -914,6 +897,12 @@ mod tests {
             guild::contribute_belly(&mut actor, &mut guild_rec, 200),
             Amf3Value::String("ok".to_string())
         );
+        let belly_before = actor.belly_num;
+        assert_eq!(
+            guild::contribute_belly(&mut actor, &mut guild_rec, -1_000_000),
+            Amf3Value::String("err".to_string())
+        );
+        assert_eq!(actor.belly_num, belly_before, "a negative contribution must not pay the player");
 
         let move_res = town::move_in_town(&mut actor, 1, 25, 30);
         assert_eq!(move_res.get_field("x").and_then(|v| v.as_i64()), Some(25));

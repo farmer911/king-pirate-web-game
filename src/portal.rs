@@ -194,7 +194,9 @@ const REACT_PORTAL_SHELL_HTML: &str = r#"<!DOCTYPE html>
       publicPath: "/T9NuoYa/ruffle/",
       autoplay: "on",
       unmuteOverlay: "hidden",
-      preloader: false,
+      splashScreen: false,
+      // Main.swf parses assets/xmls/xmls.txt in one frame; Ruffle's default 15 s limit kills it.
+      maxExecutionDuration: 600,
       warnOnUnsupportedContent: false,
       allowScriptAccess: true,
       letterbox: "on",
