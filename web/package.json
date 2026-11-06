@@ -4,6 +4,13 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "bun build ./src/main.tsx --outdir ../client-assets/portal --entry-naming app.js --minify && cp ./src/legacy.css ../client-assets/portal/legacy.css"
+    "build": "mkdir -p ../client-assets/portal && bun build ./src/main.tsx --outdir ../client-assets/portal --entry-naming app.js --minify && cp ./src/legacy.css ../client-assets/portal/legacy.css"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0"
   }
 }

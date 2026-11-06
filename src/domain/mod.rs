@@ -86,6 +86,7 @@ pub fn dispatch_client_rpc(
 
     let ret_val = match (clazz, method) {
         ("gm", "getTime") => Amf3Value::Integer(now_i32),
+        // STUB: hard-coded "ok"
         ("gm", "reportClientError") => Amf3Value::String("ok".to_string()),
         ("user", "login") => user::rpc_user_login_amf(session, args, now_unix),
         ("user", "getUsers") => user::rpc_get_users(session, store)?,
@@ -122,18 +123,25 @@ pub fn dispatch_client_rpc(
                 return Err("close: missing PlayerSessionActor on user.getUser");
             }
         }
+        // STUB: hard-coded empty list
         ("user", "getVaConfig" | "getArrConfig" | "getSettings") => Amf3Value::dense_list([]),
+        // STUB: ignores args, returns "ok"
         ("user", "setVaConfig" | "setMute" | "setVisibleCount" | "showDress") => {
             Amf3Value::String("ok".to_string())
         }
+        // STUB: every switch forced open instead of SwitchLogic rules; getSwitchInfo name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
         ("user", "getSwitch" | "getSwitchInfo") | ("switch", "getSwitchInfo") => {
             // Return all 63 unlocked `SwitchDef` IDs (`legacy-ref/rpcfw/def/Switch.def.php:18-81`
             // & `SwitchLogic.class.php:233-253`) so all 63 UI icons in `Main.swf` are enabled.
             Amf3Value::dense_list((1..=63).map(Amf3Value::Integer))
         }
+        // STUB: hard-coded 10
         ("user", "getCanRecruitHeroNum") => Amf3Value::Integer(10),
+        // STUB: hard-coded true
         ("user", "isPay") => Amf3Value::Bool(true),
+        // STUB: hard-coded false
         ("user", "isGetPayReward") => Amf3Value::Bool(false),
+        // STUB: hard-coded values
         ("user", "getSecondPayInfo") => Amf3Value::assoc_map([
             ("is_pay", Amf3Value::Integer(1)),
             ("is_get", Amf3Value::Integer(0)),
@@ -142,6 +150,7 @@ pub fn dispatch_client_rpc(
             let uid = session.uid.unwrap_or(20001) as i64;
             load_player_bag_from_store(store, uid).to_amf3()
         }
+        // STUB: one hard-coded formation; getFormation/getSquad name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
         ("formation", "getFormation" | "getAllFormation" | "getSquad") => {
             let uid = session.uid.unwrap_or(20001) as i32;
             let master_hid = uid * 100 + 1;
@@ -155,6 +164,7 @@ pub fn dispatch_client_rpc(
                 ]),
             )])
         }
+        // STUB: fallback master hero (hp 1000) invented; getAllHeroes name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
         ("hero", "getRecruitHeroes" | "getPubHeroes" | "getAllHeroes" | "getHeroes") => {
             let uid = session.uid.unwrap_or(20001) as i32;
             let utid = session.utid.unwrap_or(1);
@@ -201,9 +211,13 @@ pub fn dispatch_client_rpc(
                 Amf3Value::assoc_map(entries)
             }
         }
+        // STUB: hard-coded empty list
         ("hero", "getConvertHeroes") => Amf3Value::dense_list([]),
+        // STUB: hard-coded -1
         ("growupplan", "getInfo") => Amf3Value::Integer(-1),
+        // STUB: hard-coded 0
         ("boss", "getBossOffset") => Amf3Value::Integer(0),
+        // STUB: va_charity_info hard-coded
         ("charity", "getCharityInfo") => {
             let uid = session.uid.unwrap_or(20001) as i32;
             let rows = store.select(
@@ -235,6 +249,7 @@ pub fn dispatch_client_rpc(
                 ),
             ])
         }
+        // STUB: belly/gold amounts not from legacy; no VIP or time check
         ("charity", "fetchVipSalary") => {
             // `CharityLogic.class.php:95-141`: grant VIP salary, update `salary_time`, return bag diff
             let uid = session.uid.unwrap_or(20001) as i64;
@@ -266,6 +281,7 @@ pub fn dispatch_client_rpc(
             store.insert_or_update("t_charity", "uid", row, false);
             Amf3Value::dense_list([])
         }
+        // STUB: belly amount not from legacy; no time check
         ("charity", "fetchPresigeSalary") => {
             // `CharityLogic.class.php:314-364`: grant prestige salary Belly, update `prestige_salary_time`, return "ok"
             let uid = session.uid.unwrap_or(20001) as i64;
@@ -299,6 +315,7 @@ pub fn dispatch_client_rpc(
             store.insert_or_update("t_charity", "uid", row, false);
             Amf3Value::String("ok".to_string())
         }
+        // STUB: amounts and reply shape not from legacy
         ("charity", "onClicktoFetchSalary") => {
             let uid = session.uid.unwrap_or(20001) as i64;
             if let Some(actor) = actor_slot.as_mut() {
@@ -326,7 +343,9 @@ pub fn dispatch_client_rpc(
                 ("VipSalary", Amf3Value::dense_list([])),
             ])
         }
+        // STUB: hard-coded 1500
         ("achievements", "getAchievementPoints") => Amf3Value::Integer(1500),
+        // STUB: belly amount not from legacy
         ("achievements", "fetchSalary") => {
             if let Some(actor) = actor_slot.as_mut() {
                 let _ = actor.add_belly(100_000);
@@ -336,10 +355,12 @@ pub fn dispatch_client_rpc(
                 ("belly", Amf3Value::Integer(100_000)),
             ])
         }
+        // STUB: hard-coded empty list
         (
             "achievements",
             "getKeepOnlineAchievements" | "getLastOnlineAchievements" | "getNameList",
         ) => Amf3Value::dense_list([]),
+        // STUB: hard-coded values
         ("elves", "get") => {
             let uid = session.uid.unwrap_or(20001) as i32;
             Amf3Value::assoc_map([
@@ -358,13 +379,17 @@ pub fn dispatch_client_rpc(
                 ),
             ])
         }
+        // STUB: hard-coded empty task list
         ("task", "getAllTask") => Amf3Value::assoc_map([
             ("accept", Amf3Value::dense_list([])),
             ("complete", Amf3Value::dense_list([])),
             ("va_task", Amf3Value::dense_list([])),
         ]),
+        // STUB: hard-coded 0
         ("mail", "getNoReadMailCount") => Amf3Value::Integer(0),
+        // STUB: hard-coded true
         ("city", "checkEnter") => Amf3Value::Bool(true),
+        // STUB: town.enterTown name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
         ("city" | "town", "enterTown") => {
             let town_id = args.first().and_then(|v| v.as_i64()).unwrap_or(1) as u32;
             let x = args.get(1).and_then(|v| v.as_i64()).unwrap_or(19) as u16;
@@ -375,6 +400,7 @@ pub fn dispatch_client_rpc(
             session.town_id = Some(town_id);
             Amf3Value::String("ok".to_string())
         }
+        // STUB: city.move/town.moveInTown name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
         ("city" | "town", "move" | "moveInTown") => {
             let x = args.first().and_then(|v| v.as_i64()).unwrap_or(19) as u16;
             let y = args.get(1).and_then(|v| v.as_i64()).unwrap_or(25) as u16;
@@ -389,11 +415,14 @@ pub fn dispatch_client_rpc(
                 ])
             }
         }
+        // STUB: hard-coded [1]; city.getEnterTownList and town.enterTownList/getEnterTownList name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
         ("city" | "town", "enterTownList" | "getEnterTownList") => {
             let (_ux, _uy) = town::unpack_town_xy((19 << 16) | 25);
             Amf3Value::dense_list([Amf3Value::Integer(1)])
         }
+        // STUB: hard-coded "ok"; town.leaveTown name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
         ("city" | "town", "leaveTown") => Amf3Value::String("ok".to_string()),
+        // STUB: gold cost formula not from legacy
         ("user", "buyExecution") => {
             let num = args.first().and_then(|v| v.as_i64()).unwrap_or(10) as i32;
             if let Some(actor) = actor_slot.as_mut() {
@@ -402,6 +431,7 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: 10 gold per grid not from legacy
         ("bag", "openGrid") => {
             let slots = args.first().and_then(|v| v.as_i64()).unwrap_or(1) as u16;
             let uid = session.uid.unwrap_or(20001) as i64;
@@ -416,7 +446,8 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
-        ("bag", "receiveItem" | "addItems") => {
+        // STUB: WRONG ARGS: legacy is receiveItem($gid, $item_id) moving an item out of the temp bag (legacy-ref/rpcfw/module/bag/Bag.class.php:854); here args are read as (template_id, count), so a client can create any item
+        ("bag", "receiveItem") => {
             let tmpl_id = args.first().and_then(|v| v.as_i64()).unwrap_or(10001) as u32;
             let count = args.get(1).and_then(|v| v.as_i64()).unwrap_or(1) as u32;
             let uid = session.uid.unwrap_or(20001) as i64;
@@ -442,6 +473,7 @@ pub fn dispatch_client_rpc(
             }
             pbag.to_amf3()
         }
+        // STUB: fake item record (template 10001); cost/amount comes from client args (cheatable)
         ("forge", "reinforce") => {
             let item_id = args.first().and_then(|v| v.as_i64()).unwrap_or(1000001) as u64;
             let cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(200);
@@ -457,6 +489,7 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: cost/amount comes from client args (cheatable)
         ("hero", "recruit" | "addPrestigeHero") => {
             let htid = args.first().and_then(|v| v.as_i64()).unwrap_or(101) as u32;
             let cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(10);
@@ -469,6 +502,7 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: fake hero record; cost/amount comes from client args (cheatable)
         ("hero", "addGoodwillByGold") => {
             let htid = args.first().and_then(|v| v.as_i64()).unwrap_or(101) as u32;
             let gold_cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(5);
@@ -493,6 +527,7 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: fake hero record (htid 101); cost/amount comes from client args (cheatable)
         ("haki", "trial" | "allGoldTrial") => {
             let belly_cost = args.first().and_then(|v| v.as_i64()).unwrap_or(100);
             if let Some(actor) = actor_slot.as_mut() {
@@ -516,6 +551,7 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: fake formation, baseline battle formula (see Phase 5)
         ("copy" | "elitecopy" | "herocopy", "attack") => {
             let army_id = args.first().and_then(|v| v.as_i64()).unwrap_or(1001) as u32;
             let enemy_lv = args.get(1).and_then(|v| v.as_i64()).unwrap_or(1).max(1) as u16;
@@ -540,6 +576,7 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: fake teams and ranks, baseline battle formula
         ("arena" | "olympic", "challenge") => {
             let opp_uid = args.first().and_then(|v| v.as_i64()).unwrap_or(20002) as u32;
             if let Some(actor) = actor_slot.as_mut() {
@@ -567,6 +604,7 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: fake boss state; damage comes from client args (cheatable); boss.attackBoss/guildboss.attackBoss/randomboss.attack name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
         ("boss" | "guildboss" | "randomboss", "attack" | "attackBoss") => {
             let boss_id = args.first().and_then(|v| v.as_i64()).unwrap_or(1) as u32;
             let dmg = args.get(1).and_then(|v| v.as_i64()).unwrap_or(2500);
@@ -577,6 +615,7 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: creation cost 500 not from legacy
         ("guild", "create") => {
             let gname = args.first().and_then(|v| v.as_str()).unwrap_or("StrawHat");
             if let Some(actor) = actor_slot.as_mut() {
@@ -592,6 +631,7 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: fake guild record; cost/amount comes from client args (cheatable)
         ("guild", "contributeBelly" | "contributeGold") => {
             let amount = args.first().and_then(|v| v.as_i64()).unwrap_or(200);
             if let Some(actor) = actor_slot.as_mut() {
@@ -607,6 +647,7 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: fake pet record; cost/amount comes from client args (cheatable); copet.train/copet.feedingOnce/riding.feedingOnce name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
         ("pet" | "copet" | "riding", "train" | "feedingOnce") => {
             let exp_gain = args.first().and_then(|v| v.as_i64()).unwrap_or(150) as u32;
             let belly_cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(100);
@@ -623,6 +664,7 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: cost 300 not from legacy
         ("kitchen", "cook") => {
             if let Some(actor) = actor_slot.as_mut() {
                 economy::kitchen_cook(actor, 300)
@@ -630,6 +672,7 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: rewards not from legacy; reward.fetchPrize/active.dailySign name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
         ("reward" | "active", "dailySign" | "fetchPrize") => {
             if let Some(actor) = actor_slot.as_mut() {
                 economy::daily_sign_reward(actor, 50, 2000)
@@ -637,73 +680,103 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
+        // STUB: hard-coded values
         ("reward", "getSignInfo") => Amf3Value::assoc_map([
             ("sign_time", Amf3Value::Integer(now_i32)),
             ("step", Amf3Value::Integer(1)),
             ("upgrade_times", Amf3Value::Integer(0)),
             ("va_sign_info", Amf3Value::dense_list([])),
         ]),
+        // STUB: hard-coded empty list
         ("reward", "getGiftInfo") => Amf3Value::dense_list([]),
+        // STUB: hard-coded values
         ("reward", "getRewardGoldInfo") => Amf3Value::assoc_map([
             ("gold_num", Amf3Value::Integer(1_000_000)),
             ("va_reward", Amf3Value::dense_list([])),
         ]),
+        // STUB: hard-coded values; legacy registers turntable (Framework.cfg.php:397) but module/turntable/ is missing from the VM
         ("turntable", "getInfo") => Amf3Value::assoc_map([
             ("times", Amf3Value::Integer(3)),
             ("MaxTimes", Amf3Value::Integer(3)),
             ("item", Amf3Value::Integer(0)),
         ]),
+        // STUB: hard-coded 1_000_000
         ("turntable", "getBellyPond") => Amf3Value::Integer(1_000_000),
+        // STUB: hard-coded values
         ("digactivity", "getInfo") => Amf3Value::assoc_map([
             ("free_times", Amf3Value::Integer(3)),
             ("drop_num", Amf3Value::Integer(0)),
             ("va_dig", Amf3Value::dense_list([])),
         ]),
+        // STUB: hard-coded values
         ("taskfight", "getInfo") => Amf3Value::assoc_map([
             ("point", Amf3Value::Integer(100)),
             ("prized", Amf3Value::dense_list([])),
             ("va_active", Amf3Value::dense_list([])),
         ]),
+        // STUB: hard-coded empty list
         ("depositPlan", "getDepositPlanInfo") => Amf3Value::dense_list([]),
+        // STUB: hard-coded values
         ("weekcard", "getInfo") => Amf3Value::assoc_map([
             ("buy_time", Amf3Value::Integer(0)),
             ("reward_time", Amf3Value::Integer(0)),
         ]),
+        // STUB: hard-coded values
         ("festival", "getFeedbackUserInfo") => Amf3Value::assoc_map([
             ("point", Amf3Value::Integer(0)),
             ("va_info", Amf3Value::dense_list([])),
         ]),
+        // STUB: hard-coded empty list
         ("payback", "getCurAvailablePayBackIds") => Amf3Value::dense_list([]),
+        // STUB: hard-coded 0
         ("mergeserver", "getIsCompensation" | "getMergerServerTimes") => Amf3Value::Integer(0),
+        // STUB: hard-coded "ok"
         ("mergeserver", "getCompensation") => Amf3Value::String("ok".to_string()),
+        // STUB: hard-coded empty list
         ("retrieve", "getInfo") => Amf3Value::dense_list([]),
+        // STUB: hard-coded values
         ("dress", "getDressRommInfo") => Amf3Value::assoc_map([
             ("cur_dress", Amf3Value::Integer(0)),
             ("arr_dress", Amf3Value::dense_list([])),
         ]),
+        // STUB: hard-coded values
         ("copet", "getUserPetInfo") => Amf3Value::assoc_map([
             ("cur_pet", Amf3Value::Integer(0)),
             ("arr_pet", Amf3Value::dense_list([])),
         ]),
+        // STUB: hard-coded empty list
         ("copet", "getUserPetCollectionInfo") => Amf3Value::dense_list([]),
+        // STUB: hard-coded empty list
         ("port", "selfResourceInfo") => Amf3Value::dense_list([]),
+        // STUB: hard-coded values
         ("sciTech", "getCdEndTime") => Amf3Value::assoc_map([
             ("cd_time", Amf3Value::Integer(0)),
             ("is_busy", Amf3Value::Integer(0)),
         ]),
+        // STUB: hard-coded empty list
         ("guildskill", "getAllGuildTechLv") => Amf3Value::dense_list([]),
+        // STUB: hard-coded 0
         ("propertylock", "getStatus") => Amf3Value::Integer(0),
+        // STUB: hard-coded values
         ("worldwar", "getUserWorldWarInfo") => Amf3Value::assoc_map([
             ("cheer_uid", Amf3Value::Integer(0)),
             ("worship_time", Amf3Value::Integer(0)),
         ]),
+        // STUB: hard-coded values
         ("worldpeak", "getUserPeakInfo") => {
             Amf3Value::assoc_map([("point", Amf3Value::Integer(0))])
         }
+        // STUB: hard-coded false
         ("arena", "hasReward") => Amf3Value::Bool(false),
+        // STUB: hard-coded empty list
         ("arena", "getDefeatedNotice") => Amf3Value::dense_list([]),
+        // STUB: hard-coded empty list
         ("gm", "getInfoBeforeExit") => Amf3Value::dense_list([]),
-        _ => Amf3Value::dense_list([]),
+        _ => {
+            // STUB: not ported. Logged so every gap shows up while playing; `[]` keeps the client connected.
+            eprintln!("[UNHANDLED_RPC] {clazz}.{method}");
+            Amf3Value::dense_list([])
+        }
     };
 
     let mut user_modify = None;
@@ -779,7 +852,7 @@ mod tests {
         assert_eq!(ulogin_res, Amf3Value::String("ok".to_string()));
         assert_eq!(session.uid, Some(20001));
 
-        // 5. Execute gameplay across all bounded domains in L1 RAM (`~50 ns`)
+        // 5. Execute gameplay across all bounded domains in memory
         let _ = economy::daily_sign_reward(&mut actor, 50, 2000);
         let _ = economy::kitchen_cook(&mut actor, 300);
         assert_eq!(user::rpc_buy_execution(&mut actor, 10, 20), Amf3Value::String("ok".to_string()));

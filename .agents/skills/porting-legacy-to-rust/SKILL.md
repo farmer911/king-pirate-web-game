@@ -52,7 +52,7 @@ Port one legacy RPC (or one formula) at a time. A port is done only when the Rus
 | Static game store | `src/btstore.rs` | `RawSkill`, `RawBuffer`, `RawTarget`, `StaticBtstore::{new_baseline,load_skills_csv,get_skill,get_buffer,get_target}` |
 | Combat engine | `src/battle.rs` | `HeroUnit`, `FormationGrid`, `ReactionRecord`, `ActionRecord`, `BattleResult::to_amf3`, `compute_skill_damage`, `execute_battle_do_hero` |
 | Domains | `src/domain/*.rs` | `dispatch_client_rpc`, `load_player_bag_from_store`, `user::*`, `hero::*`, `bag::*`, `forge::*`, `copy::*`, `arena::*`, `boss::*`, `guild::*`, `town::*`, `pet::*`, `economy::*` |
-| Entrypoint | `src/main.rs` | `king-pirate serve` (HTTP `:8081`, WS `:8003`, TCP `:8002`, Flash policy `:843`) |
+| Entrypoint | `src/main.rs` | `king-pirate` always serves (HTTP `:8081`, WS `:8003`, TCP `:8002`, Flash policy `:843`) |
 
 ## Rationalizations to Reject
 

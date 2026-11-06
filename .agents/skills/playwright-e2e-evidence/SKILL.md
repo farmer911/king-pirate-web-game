@@ -11,7 +11,7 @@ description: Use when changing anything under web/, the portal routes in src/por
 
 1. **RED:** add or update a test in `web/e2e/legacy-parity.spec.ts` for the behavior. Run it and see it fail.
 2. **Build:** `cargo build` and `cd web && npm run build` (outputs `client-assets/portal/app.js`).
-3. **Run the server:** `cargo run -- serve` (HTTP `:8081`, WS `:8003`, TCP `:8002`).
+3. **Run the server:** `cargo run` (HTTP `:8081`, WS `:8003`, TCP `:8002`).
 4. **GREEN:** `cd web && npx playwright test`. Paste the `N passed` line.
 5. **Unit gate:** `cargo test`. Paste the result line.
 
