@@ -1,10 +1,11 @@
-//! Traffic recorder: `king-pirate record [--upstream <host:port>]`.
+//! Forwarding to legacy, with optional recording.
 //!
-//! The server runs as usual (portal and client files on `:8081`), but every game connection on `:8003`
-//! (WebSocket, used by Ruffle) or `:8002` (TCP) is forwarded to a legacy lcserver, and both directions
-//! are saved frame by frame to `tests/fixtures/sessions/<unix time>-<n>.log`. These logs are the parity
-//! fixtures for porting: a Rust handler is correct when it answers a recorded request with the recorded
-//! response.
+//! With `KING_PIRATE_UPSTREAM=<host:port>` (the bridge: Rust front, legacy game backend) or
+//! `king-pirate record [--upstream <host:port>]`, the server runs as usual (portal and client files on
+//! `:8081`), but every game connection on `:8003` (WebSocket, used by Ruffle) or `:8002` (TCP) is
+//! forwarded to a legacy lcserver. `record` also saves both directions frame by frame to
+//! `tests/fixtures/sessions/<unix time>-<n>.log`. These logs are the parity fixtures for porting: a Rust
+//! handler is correct when it answers a recorded request with the recorded response.
 //!
 //! Log format, one frame per line: `<ms since connect> <c2s|s2c> <frame as hex>`, preceded by a
 //! `# <method or callback name>` comment for readers. The Flash policy exchange (NUL-terminated XML,
@@ -100,36 +101,45 @@ fn frame_label(v: &Amf3Value) -> String {
     if names.is_empty() { "frame".to_string() } else { format!("reply {}", names.join(", ")) }
 }
 
-/// Forward one game connection to `upstream` and record it into a new file in `log_dir`.
-/// `ws`: the client speaks WebSocket (Ruffle on `:8003`); otherwise raw TCP (`:8002`).
-pub fn proxy_connection(mut client: TcpStream, upstream: &str, ws: bool, log_dir: &Path) {
+/// Create a new session log file in `log_dir`.
+fn open_session_log(log_dir: &Path) -> io::Result<(std::path::PathBuf, File)> {
     static NEXT: AtomicU64 = AtomicU64::new(1);
+    let unix = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let path = log_dir.join(format!("{unix}-{}.log", NEXT.fetch_add(1, Ordering::Relaxed)));
+    std::fs::create_dir_all(log_dir)?;
+    let file = File::create(&path)?;
+    Ok((path, file))
+}
+
+/// Forward one game connection to `upstream`; with `log_dir`, also record it into a new file there.
+/// `ws`: the client speaks WebSocket (Ruffle on `:8003`); otherwise raw TCP (`:8002`).
+pub fn proxy_connection(mut client: TcpStream, upstream: &str, ws: bool, log_dir: Option<&Path>) {
     if ws && !accept_websocket(&mut client) {
         return;
     }
     let mut up = match TcpStream::connect(upstream) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("[RECORD] cannot reach upstream {upstream}: {e}");
+            eprintln!("[PROXY] cannot reach upstream {upstream}: {e}");
             return;
         }
     };
-    let unix = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    let path = log_dir.join(format!("{unix}-{}.log", NEXT.fetch_add(1, Ordering::Relaxed)));
-    let file = match std::fs::create_dir_all(log_dir).and_then(|_| File::create(&path)) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("[RECORD] cannot create {}: {e}", path.display());
+    let log = match log_dir.map(open_session_log) {
+        None => None,
+        Some(Ok((path, file))) => {
+            println!("[RECORD] {} -> {}", upstream, path.display());
+            Some(Arc::new(Mutex::new(SessionLog::new(file))))
+        }
+        Some(Err(e)) => {
+            eprintln!("[RECORD] cannot create a session log: {e}");
             return;
         }
     };
-    println!("[RECORD] {} -> {}", upstream, path.display());
-    let log = Arc::new(Mutex::new(SessionLog::new(file)));
     let (Ok(mut up_read), Ok(mut client_write)) = (up.try_clone(), client.try_clone()) else {
         return;
     };
 
-    let s2c_log = Arc::clone(&log);
+    let s2c_log = log.clone();
     let s2c = std::thread::spawn(move || {
         let mut chunk = [0u8; 16 * 1024];
         while let Ok(n @ 1..) = up_read.read(&mut chunk) {
@@ -138,7 +148,7 @@ pub fn proxy_connection(mut client: TcpStream, upstream: &str, ws: bool, log_dir
             if sent.is_err() {
                 break;
             }
-            if let Ok(mut l) = s2c_log.lock() {
+            if let Some(Ok(mut l)) = s2c_log.as_ref().map(|l| l.lock()) {
                 let _ = l.feed(Dir::S2c, data);
             }
         }
@@ -162,7 +172,7 @@ pub fn proxy_connection(mut client: TcpStream, upstream: &str, ws: bool, log_dir
         if up.write_all(&data).is_err() {
             break;
         }
-        if let Ok(mut l) = log.lock() {
+        if let Some(Ok(mut l)) = log.as_ref().map(|l| l.lock()) {
             let _ = l.feed(Dir::C2s, &data);
         }
     }
@@ -230,7 +240,7 @@ mod tests {
         let dir2 = dir.clone();
         let proxy = std::thread::spawn(move || {
             let (c, _) = front.accept().unwrap();
-            proxy_connection(c, &up_addr, false, &dir2);
+            proxy_connection(c, &up_addr, false, Some(&dir2));
         });
 
         let mut client = TcpStream::connect(front_addr).unwrap();

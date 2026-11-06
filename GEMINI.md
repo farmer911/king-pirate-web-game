@@ -28,11 +28,13 @@ Rewrite the legacy "Vua Hai Tac 2025" (BabelTime `v298`) game server as **one Ru
 | :--- | :--- |
 | Unit + policy tests | `cargo test` |
 | Build server binary | `cargo build` (required before running; `cargo test` does not rebuild it) |
+| **Play (bridge)** | `docker compose up -d`, open `http://<host>:8081`. Needs once: `client-assets/` and the `kp-legacy-oracle` image (rows below). Game data persists in the `legacy-db` volume |
 | Run server | `cargo run` (always serves: HTTP `:8081`, WS `:8003`, TCP `:8002`, Flash policy `:843`; a `serve` argument is accepted and ignored). Unported RPCs print `[UNHANDLED_RPC] <class>.<method>` to stderr |
 | Build portal | `cd web && npm install && bun run build` (writes `client-assets/portal/app.js`; needs Bun) |
 | Portal E2E | `cd web && npx playwright test` (server must be running) |
 | Legacy oracle (local only) | Stage once in WSL: `tools/legacy-oracle/stage.sh <mounted VM root> /root/kp/oracle`, `docker build -t kp-legacy-oracle /root/kp/oracle`; then `docker compose -f tools/legacy-oracle/compose.yml up -d` (game `127.0.0.1:18002`, old portal `127.0.0.1:18080`) |
 | Record legacy traffic | `cargo run -- record` (or `--upstream host:port`), open `http://127.0.0.1:8081`, play; each connection is saved to `tests/fixtures/sessions/` |
+| Forward without recording | `KING_PIRATE_UPSTREAM=<host:port> cargo run` (what the `app` service does) |
 | Env vars | `KING_PIRATE_ASSETS` (default `client-assets`), `KING_PIRATE_STORE` (default `data/pirate_store.amf3`) |
 
 ## 4. Legacy System (ground truth)
@@ -62,8 +64,9 @@ Full inventory: `legacy-ref/INVENTORY.md`. Summary (measured from the extracted 
 | Battle engine | `src/battle.rs`, `src/btstore.rs` | simplified placeholder: one flat formula, single target, no buffs; does not load the real skill table |
 | Gameplay domains | `src/domain/*.rs` | thin; most legacy modules not started |
 | Legacy oracle + recorder | `tools/legacy-oracle/`, `src/recorder.rs` | works: full login, create character, enter town session recorded (52 requests) |
-| Ruffle client | `client-assets/T9NuoYa/`, Ruffle 0.7.1 | loads, but Main.swf parses 72.8 MB of XML before connecting: about 7-9 minutes in headless Chromium (`maxExecutionDuration: 600` in `src/portal.rs`) |
-| Docker | `Dockerfile`, `docker-compose.yml` | broken: image has no `client-assets/` (the binary now serves by default), the MariaDB service and `DATABASE_URL` are unused by the code |
+| Ruffle client | `client-assets/T9NuoYa/`, Ruffle 0.7.1 | plays (create character, town, quests UI). Two problems: (1) Main.swf parses 72.8 MB of XML before connecting, about 9-10 minutes in headless Chromium (`maxExecutionDuration: 600` in `src/portal.rs`); (2) Vietnamese letters outside Latin-1 (U+1EA0-U+1EF9, e.g. a with dot below) are missing in game text: the SWF asks for "Verdana" (122 uses) and Ruffle uses the SWF's embedded Latin-only Verdana. `deviceFontRenderer: "canvas"` shows them but makes the XML step exceed 600 s |
+| Bridge (playable) | `docker-compose.yml`, `Dockerfile`, `src/recorder.rs` | works: `docker compose up -d` -> register on the Rust portal -> create character -> town, game logic by legacy. Measured idle RAM: legacy container 1,092 MiB (php-fpm's master holds about 1 GB of static game data), Rust app under 1 MiB (cgroup total_rss rounds to 0) |
+| Portal GM / level / fix tools | `src/portal.rs` | not bridged: they edit the Rust store, while characters live in legacy MySQL (`web/e2e` test 3 fails in bridge mode for this reason) |
 
 ## 6. Lessons Log (add one entry when a rule is broken or a bug escapes)
 

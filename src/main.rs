@@ -172,7 +172,9 @@ pub fn run_live_daemon(
     assets_root: PathBuf,
     persist_path: PathBuf,
     upstream: Option<String>,
+    record: bool,
 ) -> std::io::Result<()> {
+    let log_dir = record.then(|| Path::new(recorder::SESSION_DIR));
     let store = Arc::new(data::DataStore::new(data::SqlDialect::SqliteWal));
     if persist_path.is_file() {
         let _ = store.load_from_disk(&persist_path);
@@ -200,7 +202,7 @@ pub fn run_live_daemon(
             let pp = persist_ws.clone();
             let up = upstream_ws.clone();
             std::thread::spawn(move || match up {
-                Some(u) => recorder::proxy_connection(incoming, &u, true, Path::new(recorder::SESSION_DIR)),
+                Some(u) => recorder::proxy_connection(incoming, &u, true, log_dir),
                 None => handle_ws_client(incoming, st, pp),
             });
         }
@@ -214,7 +216,7 @@ pub fn run_live_daemon(
             let pp = persist_tcp.clone();
             let up = upstream.clone();
             std::thread::spawn(move || match up {
-                Some(u) => recorder::proxy_connection(incoming, &u, false, Path::new(recorder::SESSION_DIR)),
+                Some(u) => recorder::proxy_connection(incoming, &u, false, log_dir),
                 None => handle_tcp_client(incoming, st, pp),
             });
         }
@@ -232,17 +234,23 @@ pub fn run_live_daemon(
     Ok(())
 }
 
-/// Starts the server. `king-pirate record [--upstream <host:port>]` forwards game connections to a legacy
-/// lcserver and records them (see `recorder`); any other argument (e.g. the old `serve`) is ignored.
+/// Starts the server. Game connections are handled by the Rust port, or forwarded to a legacy lcserver when
+/// `KING_PIRATE_UPSTREAM=<host:port>` or `--upstream <host:port>` is set (the bridge). `king-pirate record`
+/// forwards (default upstream: the local oracle) and saves every session (see `recorder`).
+/// Any other argument (e.g. the old `serve`) is ignored.
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let upstream = (args.get(1).map(String::as_str) == Some("record")).then(|| {
-        args.iter()
-            .skip_while(|a| *a != "--upstream")
-            .nth(1)
-            .cloned()
-            .unwrap_or_else(|| recorder::DEFAULT_UPSTREAM.to_string())
-    });
+    let record = args.get(1).map(String::as_str) == Some("record");
+    let upstream = args
+        .iter()
+        .skip_while(|a| *a != "--upstream")
+        .nth(1)
+        .cloned()
+        .or_else(|| std::env::var("KING_PIRATE_UPSTREAM").ok())
+        .or_else(|| record.then(|| recorder::DEFAULT_UPSTREAM.to_string()));
+    if let Some(u) = &upstream {
+        println!("Game connections are forwarded to legacy lcserver at {u}{}", if record { " and recorded" } else { "" });
+    }
     let assets_root = std::env::var("KING_PIRATE_ASSETS")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("client-assets"));
@@ -256,6 +264,7 @@ fn main() {
         assets_root,
         persist_path,
         upstream,
+        record,
     ) {
         eprintln!("Fatal daemon error: {}", err);
         std::process::exit(1);

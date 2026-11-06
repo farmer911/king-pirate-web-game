@@ -1,0 +1,5 @@
+# The image needs only the Rust sources; client-assets/ is mounted at run time.
+*
+!Cargo.toml
+!Cargo.lock
+!src/
