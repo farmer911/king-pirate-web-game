@@ -189,7 +189,7 @@ mod tests {
         check_dir(Path::new("src"), true);
         check_dir(Path::new(".agents/rules"), true);
         check_dir(Path::new(".agents/skills"), true);
-        check_dir(Path::new("legacy-ref"), false);
+        // `legacy-ref/` is a verbatim legacy copy (core rule R6): its original text is ground truth.
 
         for doc in ["GEMINI.md", "REWRITE_PLAN.md", ".agents/STATE.md", "Cargo.toml"] {
             if let Ok(content) = fs::read_to_string(doc) {
@@ -246,14 +246,21 @@ mod tests {
         use std::fs;
         use std::path::Path;
 
-        // 1. Verify Rule 09 guardrail exists and is always_on
-        let rule_09 = fs::read_to_string(
-            ".agents/rules/09-mandatory-planning-and-zero-fabrication-guardrail.md",
-        )
-        .expect("Rule 09 guardrail file must exist");
+        // 1. Exactly one always-on rule file (`00-core.md`) so agents never get conflicting rule sets
+        let core_rule =
+            fs::read_to_string(".agents/rules/00-core.md").expect("core rule file must exist");
         assert!(
-            rule_09.contains("trigger: always_on"),
-            "Rule 09 must have trigger: always_on"
+            core_rule.contains("trigger: always_on"),
+            "00-core.md must have trigger: always_on"
+        );
+        let always_on_rules = fs::read_dir(".agents/rules")
+            .expect("read .agents/rules failed")
+            .filter_map(|e| fs::read_to_string(e.ok()?.path()).ok())
+            .filter(|c| c.contains("trigger: always_on"))
+            .count();
+        assert_eq!(
+            always_on_rules, 1,
+            "only .agents/rules/00-core.md may be always_on; put new rules inside it"
         );
 
         // 2. Verify React.js web portal source (`web/src/App.tsx`) and built bundle exist
@@ -266,10 +273,13 @@ mod tests {
                 required_class
             );
         }
-        assert!(
-            Path::new("client-assets/portal/app.js").is_file(),
-            "Built React bundle client-assets/portal/app.js must exist"
-        );
+        // `client-assets/` is git-ignored; on a fresh clone it does not exist yet.
+        if Path::new("client-assets").is_dir() {
+            assert!(
+                Path::new("client-assets/portal/app.js").is_file(),
+                "Built React bundle client-assets/portal/app.js must exist"
+            );
+        }
 
         // 3. Verify zero `.php` files exist inside `client-assets/` (prevents raw .php downloads)
         fn assert_no_php_files(dir: &Path) {
@@ -320,13 +330,19 @@ mod tests {
         for path in [
             "REWRITE_PLAN.md",
             "GEMINI.md",
+            "CLAUDE.md",
             ".agents/STATE.md",
+            ".agents/rules/00-core.md",
             "src/actor.rs",
             "src/data.rs",
         ] {
-            let content = fs::read_to_string(path).expect("file must exist");
+            // Plan files are local-only (git-ignored), so they may be absent on a fresh clone.
+            let Ok(content) = fs::read_to_string(path) else {
+                continue;
+            };
             for phantom in ["DashMap", "rusqlite", "rust-embed", "tokio::mpsc"] {
-                if !cargo_toml.contains(phantom) {
+                // The plan's Decisions table may list a crate as "planned" (core rule R7).
+                if path != "REWRITE_PLAN.md" && !cargo_toml.contains(phantom) {
                     assert!(
                         !content.contains(phantom),
                         "HONESTY VIOLATION: {} claims phantom crate `{}` not in Cargo.toml",

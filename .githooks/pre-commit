@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Blocks any commit (by a person or an AI agent) when the test + policy suite fails.
+# Enable once per clone: git config core.hooksPath .githooks
+set -e
+cargo test --quiet
