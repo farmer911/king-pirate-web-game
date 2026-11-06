@@ -1,20 +1,11 @@
-# Legacy server as a local oracle. Ports are bound to 127.0.0.1 only.
-# lcserver listens on the VM's old address (lcserver/conf/game20002.xml:44: 192.168.1.234),
-# so the container gets that address on its own private network.
+# Legacy server alone, as a local test oracle for recording. Ports are bound to 127.0.0.1 only.
+# For playing, use the root docker-compose.yml (Rust front + this backend).
 services:
   legacy:
     image: kp-legacy-oracle
     container_name: kp-legacy-oracle
-    networks:
-      legacy:
-        ipv4_address: 192.168.1.234
     ports:
       - "127.0.0.1:18002:8002"
       - "127.0.0.1:18080:80"
     ulimits:
       nofile: 65535
-networks:
-  legacy:
-    ipam:
-      config:
-        - subnet: 192.168.1.0/24

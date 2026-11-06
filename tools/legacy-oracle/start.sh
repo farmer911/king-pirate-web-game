@@ -6,6 +6,22 @@ H=/home/pirate
 # setsid: CentOS 7 `su` kills the processes left in its session when the command returns.
 as_pirate() { setsid su pirate -s /bin/bash -c "$1" </dev/null; }
 
+# Use this container's address instead of the VM's old one (192.168.1.234): lcserver's public listener
+# (lcserver/conf/game20002.xml:44), the platform API URLs (rpcfw/conf/PlatformApi.cfg.php:22-27), the IP
+# whitelist (rpcfw/conf/WhiteList.cfg.php:24) and the GM API scripts (rpcfw/lib/api/hzw_*.php).
+OLD_IP=$(cat $H/.bound_ip 2>/dev/null || echo 192.168.1.234)
+NEW_IP=$(hostname -i | awk '{print $1}')
+if [ "$OLD_IP" != "$NEW_IP" ]; then
+  grep -rlF "$OLD_IP" $H/lcserver/conf $H/rpcfw/conf $H/rpcfw/lib/api | xargs -r sed -i "s/${OLD_IP//./\\.}/$NEW_IP/g"
+  echo "$NEW_IP" > $H/.bound_ip
+fi
+
+# Fewer PHP workers than the VM's 50 (programs/php/etc/php-fpm.conf:161-176): php-fpm's master holds
+# about 1 GB of static game data (btstore) shared copy-on-write, and every busy worker slowly copies it.
+sed -i -e 's/^pm.max_children = .*/pm.max_children = 8/' -e 's/^pm.start_servers = .*/pm.start_servers = 2/' \
+       -e 's/^pm.min_spare_servers = .*/pm.min_spare_servers = 1/' -e 's/^pm.max_spare_servers = .*/pm.max_spare_servers = 3/' \
+       $H/programs/php/etc/php-fpm.conf
+
 mkdir -p $H/lcserver/log $H/dataproxy/log $H/phpproxy/log $H/battle/log $H/rpcfw/log $H/programs/nginx/logs
 chown -R pirate:pirate $H/lcserver/log $H/dataproxy/log $H/phpproxy/log $H/battle/log $H/rpcfw/log
 
