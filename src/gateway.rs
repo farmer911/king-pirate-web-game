@@ -6,8 +6,11 @@
 //!     framing every packet with `FrameHeader` (8 bytes) + optional 16-byte MD5 XOR checksum.
 //! - `legacy-ref/rpcfw/lib/RPCFramework.class.php` (`L348-L404`, `L783-L865`) & `Framework.cfg.php` (`L203-L273`):
 //!   - Enforces the 4-tier method access guard (`Private`, `ExcludeConnect`, `ExcludeLogin`, `Public`).
-//!   - Permanently blocks unauthenticated `battle.test` (`Battle.class.php:25-32` DoS vector).
+//!   - Blocks `battle.test`, which legacy rejects outside debug mode (`Battle.class.php:28-32`).
 
+use crate::access_list::{
+    AccessList, EXCLUDE_CONNECT_METHODS, EXCLUDE_LOGIN_METHODS, PRIVATE_METHODS, PUBLIC_METHODS,
+};
 use crate::amf3::{Amf3Value, amf3_decode, amf3_encode};
 use crate::crypt::{phpproxy_checksum, websocket_accept_key};
 use crate::protocol::{
@@ -44,78 +47,26 @@ pub enum MethodAccessTier {
     PublicRequireUid,
 }
 
-/// Classify an RPC `clazz.method` call according to `Framework.cfg.php:203-411`.
+/// Classify an RPC `clazz.method` call with the legacy access lists, in the order of
+/// `RPCFramework::executeRequest` (`legacy-ref/rpcfw/lib/RPCFramework.class.php:823-857`).
+/// `None` means the method is in no list: legacy closes the connection ("undefined method").
 pub fn classify_method(clazz: &str, method: &str) -> Option<MethodAccessTier> {
-    if method.starts_with("__") {
-        return Some(MethodAccessTier::PrivateOnly);
-    }
-    match (clazz, method) {
-        // Private internal methods (`Framework.cfg.php:219-273`)
-        (
-            "user",
-            "clearUser"
-            | "modifyUserByOther"
-            | "addItemsOtherUser"
-            | "addGold4BBpay"
-            | "extraExecution"
-            | "setVip4BBpay"
-            | "getArrUserByPid"
-            | "getOrder"
-            | "getArrOrder"
-            | "getByUname"
-            | "getMultiInfoByPid"
-            | "getTopEn"
-            | "getByPid"
-            | "ban"
-            | "getBanInfo",
-        )
-        | ("timer", "execute")
-        | ("forge", "refreshReinforceProbability")
-        | ("achievements", "excuteNotify")
-        | ("copy", "groupAttack" | "addGroupEnemyDefeatInfo")
-        | ("proxy", "syncExecute" | "asyncExecute" | "closeUser")
-        | ("gm", "silentUser" | "newBroadCast" | "newResponse") => {
-            Some(MethodAccessTier::PrivateOnly)
-        }
-        // `battle.test` is permanently forbidden on public connections (Rule 07 Security Audit)
-        ("battle", "test") => Some(MethodAccessTier::PrivateOnly),
-        // Exclude-connect methods (`Framework.cfg.php:211-213`)
-        ("user", "login")
-        | ("battle", "getRecord" | "getRecordForWeb")
-        | ("gm", "reportClientError" | "getTime") => Some(MethodAccessTier::ExcludeConnect),
-        // Exclude-login methods (`Framework.cfg.php:203-205`)
-        ("user", "userLogin" | "getUsers" | "createUser" | "cancelDel" | "getRandomName" | "delUser") => {
-            Some(MethodAccessTier::ExcludeLogin)
-        }
-        // Public gameplay domains (`Framework.cfg.php:279-411` — all 132 public RPC classes)
-        (
-            "abysscopy" | "achievements" | "achieve" | "active" | "activity" | "allblue"
-            | "answer" | "applefactory" | "arena" | "astrolabe" | "ateam" | "bag" | "battle"
-            | "blackmarket" | "blood" | "boatbattle" | "bonusGrap" | "boss" | "bounty"
-            | "burningCrusade" | "captain" | "cardguess" | "change" | "charity" | "chat"
-            | "city" | "console" | "copet" | "copy" | "cruise" | "crystal" | "dailyWorship"
-            | "daimonApple" | "daytask" | "depositPlan" | "digactivity" | "divine" | "dress"
-            | "element" | "elementsys" | "elitecopy" | "elves" | "elvessystem" | "exactivity"
-            | "exchange" | "exchangeshop" | "expdrugs" | "explore" | "festival" | "fish"
-            | "forge" | "formation" | "friend" | "gatherweal" | "gb" | "gem" | "gemimprint"
-            | "gemmatrix" | "gemrefresh" | "gm" | "groupwar" | "growupplan" | "guild"
-            | "guildboss" | "guildshop" | "guildskill" | "guildwar" | "haki" | "hero"
-            | "herocopy" | "honourshop" | "horsedecoration" | "impeldown" | "itemInfo"
-            | "jewelry" | "kitchen" | "lottery" | "luckypointer" | "mail" | "map"
-            | "mergeserver" | "npc" | "NpcInfo" | "npcresource" | "olympic" | "online"
-            | "outlet" | "pachinko" | "partnertrial" | "payback" | "pet" | "poker"
-            | "pokerbill" | "port" | "practice" | "propertylock" | "purchaseExp" | "pushmap"
-            | "randomboss" | "resource" | "retrieve" | "reward" | "ride" | "riding"
-            | "rollprestige" | "rondombox" | "roulette" | "sailboat" | "salesroom" | "sciTech"
-            | "scratchcard" | "seasoul" | "smelting" | "soul" | "spend" | "strongworldshop"
-            | "switch" | "talks" | "task" | "taskfight" | "tehuishop" | "title" | "town"
-            | "trade" | "train" | "treasure" | "treasurenpc" | "turntable" | "twelvemountain"
-            | "twentyOneScores" | "user" | "vassal" | "weekcard" | "worldboat"
-            | "worldbullfightarena" | "worldchat" | "worldpeak" | "worldResource" | "worldteam"
-            | "worldtree" | "worldwar",
-            _,
-        ) => Some(MethodAccessTier::PublicRequireUid),
-        _ => None,
+    let listed = |list: AccessList| {
+        list.iter()
+            .any(|(c, methods)| *c == clazz && methods.contains(&method))
+    };
+    // `battle.test` is in `$ARR_EXCLUDE_CONNECT_METHOD`, but legacy closes the connection unless
+    // `FrameworkConfig::DEBUG` is set (`legacy-ref/rpcfw/module/battle/Battle.class.php:28-32`).
+    if (clazz, method) == ("battle", "test") || listed(PRIVATE_METHODS) {
+        Some(MethodAccessTier::PrivateOnly)
+    } else if listed(EXCLUDE_CONNECT_METHODS) {
+        Some(MethodAccessTier::ExcludeConnect)
+    } else if listed(EXCLUDE_LOGIN_METHODS) {
+        Some(MethodAccessTier::ExcludeLogin)
+    } else if listed(PUBLIC_METHODS) {
+        Some(MethodAccessTier::PublicRequireUid)
+    } else {
+        None
     }
 }
 
@@ -587,6 +538,25 @@ mod tests {
         assert_eq!(
             authorize_rpc_call(&sess, "bag.bagInfo"),
             Ok(("bag", "bagInfo"))
+        );
+
+        // 6. A logged-in client may call only listed methods (`Framework.cfg.php:279-411`):
+        //    `bag.addItems` exists in `Bag.class.php:1380` but is not in the `bag` list.
+        assert_eq!(
+            authorize_rpc_call(&sess, "bag.addItems"),
+            Err("close: undefined method")
+        );
+        assert_eq!(
+            authorize_rpc_call(&sess, "nosuchclass.getInfo"),
+            Err("close: undefined method")
+        );
+        assert_eq!(
+            authorize_rpc_call(&sess, "olympic.__executeFight"),
+            Err("close: private call from non-private client")
+        );
+        assert_eq!(
+            authorize_rpc_call(&sess, "turntable.roll"),
+            Ok(("turntable", "roll"))
         );
     }
 

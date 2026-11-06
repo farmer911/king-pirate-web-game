@@ -1,5 +1,6 @@
 #![deny(warnings, dead_code, unused_imports, unused_variables)]
 
+pub mod access_list;
 pub mod actor;
 pub mod amf3;
 pub mod battle;
