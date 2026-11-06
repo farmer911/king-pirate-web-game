@@ -53,7 +53,7 @@ Full inventory: `legacy-ref/INVENTORY.md`. Summary (measured from the extracted 
 | HTTP/WS/TCP gateway, Flash policy | `src/gateway.rs`, `src/main.rs` | done, one OS thread per connection |
 | Web portal (login, register, GM, level, fix) | `src/portal.rs`, `web/src/App.tsx` | works; session cookie is the raw username (forgeable) and passwords are stored in plain text |
 | Data store | `src/data.rs` | in-memory `BTreeMap` rows with linear scans + whole-file AMF3 snapshot; to be replaced (see plan) |
-| RPC dispatch | `src/domain/mod.rs` | 69 arms marked `// STUB:` (hard-coded or fake data, listed in `REWRITE_PLAN.md`); unknown RPCs log `[UNHANDLED_RPC]` and return `[]`. Access control checks the class only, not the method list of `Framework.cfg.php:279` (`$ARR_PUBLIC_METHOD`) |
+| RPC dispatch | `src/domain/mod.rs` | 67 arms marked `// STUB:` (hard-coded or fake data, listed in `REWRITE_PLAN.md`); unknown RPCs log `[UNHANDLED_RPC]` and return `[]`. Access control uses the legacy per-method lists (`src/access_list.rs`, generated from `Framework.cfg.php:203-411`); a method in no list closes the connection, as in legacy |
 | Battle engine | `src/battle.rs`, `src/btstore.rs` | simplified placeholder: one flat formula, single target, no buffs; does not load the real skill table |
 | Gameplay domains | `src/domain/*.rs` | thin; most legacy modules not started |
 | Docker | `Dockerfile`, `docker-compose.yml` | broken: image has no `client-assets/` (the binary now serves by default), the MariaDB service and `DATABASE_URL` are unused by the code |

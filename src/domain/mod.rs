@@ -129,8 +129,8 @@ pub fn dispatch_client_rpc(
         ("user", "setVaConfig" | "setMute" | "setVisibleCount" | "showDress") => {
             Amf3Value::String("ok".to_string())
         }
-        // STUB: every switch forced open instead of SwitchLogic rules; getSwitchInfo name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
-        ("user", "getSwitch" | "getSwitchInfo") | ("switch", "getSwitchInfo") => {
+        // STUB: every switch forced open instead of SwitchLogic rules
+        ("user", "getSwitch") => {
             // Return all 63 unlocked `SwitchDef` IDs (`legacy-ref/rpcfw/def/Switch.def.php:18-81`
             // & `SwitchLogic.class.php:233-253`) so all 63 UI icons in `Main.swf` are enabled.
             Amf3Value::dense_list((1..=63).map(Amf3Value::Integer))
@@ -150,8 +150,8 @@ pub fn dispatch_client_rpc(
             let uid = session.uid.unwrap_or(20001) as i64;
             load_player_bag_from_store(store, uid).to_amf3()
         }
-        // STUB: one hard-coded formation; getFormation/getSquad name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
-        ("formation", "getFormation" | "getAllFormation" | "getSquad") => {
+        // STUB: one hard-coded formation
+        ("formation", "getAllFormation") => {
             let uid = session.uid.unwrap_or(20001) as i32;
             let master_hid = uid * 100 + 1;
             Amf3Value::assoc_map([(
@@ -164,8 +164,8 @@ pub fn dispatch_client_rpc(
                 ]),
             )])
         }
-        // STUB: fallback master hero (hp 1000) invented; getAllHeroes name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
-        ("hero", "getRecruitHeroes" | "getPubHeroes" | "getAllHeroes" | "getHeroes") => {
+        // STUB: fallback master hero (hp 1000) invented
+        ("hero", "getRecruitHeroes" | "getPubHeroes" | "getHeroes") => {
             let uid = session.uid.unwrap_or(20001) as i32;
             let utid = session.utid.unwrap_or(1);
             let master_hid = uid * 100 + 1;
@@ -389,8 +389,7 @@ pub fn dispatch_client_rpc(
         ("mail", "getNoReadMailCount") => Amf3Value::Integer(0),
         // STUB: hard-coded true
         ("city", "checkEnter") => Amf3Value::Bool(true),
-        // STUB: town.enterTown name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
-        ("city" | "town", "enterTown") => {
+        ("city", "enterTown") => {
             let town_id = args.first().and_then(|v| v.as_i64()).unwrap_or(1) as u32;
             let x = args.get(1).and_then(|v| v.as_i64()).unwrap_or(19) as u16;
             let y = args.get(2).and_then(|v| v.as_i64()).unwrap_or(25) as u16;
@@ -400,8 +399,7 @@ pub fn dispatch_client_rpc(
             session.town_id = Some(town_id);
             Amf3Value::String("ok".to_string())
         }
-        // STUB: city.move/town.moveInTown name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
-        ("city" | "town", "move" | "moveInTown") => {
+        ("city", "moveInTown") | ("town", "move") => {
             let x = args.first().and_then(|v| v.as_i64()).unwrap_or(19) as u16;
             let y = args.get(1).and_then(|v| v.as_i64()).unwrap_or(25) as u16;
             let town_id = session.town_id.unwrap_or(1);
@@ -415,13 +413,13 @@ pub fn dispatch_client_rpc(
                 ])
             }
         }
-        // STUB: hard-coded [1]; city.getEnterTownList and town.enterTownList/getEnterTownList name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
-        ("city" | "town", "enterTownList" | "getEnterTownList") => {
+        // STUB: hard-coded [1]
+        ("city", "enterTownList") => {
             let (_ux, _uy) = town::unpack_town_xy((19 << 16) | 25);
             Amf3Value::dense_list([Amf3Value::Integer(1)])
         }
-        // STUB: hard-coded "ok"; town.leaveTown name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
-        ("city" | "town", "leaveTown") => Amf3Value::String("ok".to_string()),
+        // STUB: hard-coded "ok"
+        ("city", "leaveTown") => Amf3Value::String("ok".to_string()),
         // STUB: gold cost formula not from legacy
         ("user", "buyExecution") => {
             let num = args.first().and_then(|v| v.as_i64()).unwrap_or(10) as i32;
@@ -604,8 +602,8 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
-        // STUB: fake boss state; damage comes from client args (cheatable); boss.attackBoss/guildboss.attackBoss/randomboss.attack name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
-        ("boss" | "guildboss" | "randomboss", "attack" | "attackBoss") => {
+        // STUB: fake boss state; damage comes from client args (cheatable)
+        ("boss" | "guildboss", "attack") | ("randomboss", "attackBoss") => {
             let boss_id = args.first().and_then(|v| v.as_i64()).unwrap_or(1) as u32;
             let dmg = args.get(1).and_then(|v| v.as_i64()).unwrap_or(2500);
             if let Some(actor) = actor_slot.as_mut() {
@@ -647,8 +645,8 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
-        // STUB: fake pet record; cost/amount comes from client args (cheatable); copet.train/copet.feedingOnce/riding.feedingOnce name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
-        ("pet" | "copet" | "riding", "train" | "feedingOnce") => {
+        // STUB: fake pet record; cost/amount comes from client args (cheatable)
+        ("pet", "train" | "feedingOnce") | ("riding", "train") => {
             let exp_gain = args.first().and_then(|v| v.as_i64()).unwrap_or(150) as u32;
             let belly_cost = args.get(1).and_then(|v| v.as_i64()).unwrap_or(100);
             if let Some(actor) = actor_slot.as_mut() {
@@ -672,8 +670,8 @@ pub fn dispatch_client_rpc(
                 Amf3Value::String("err".to_string())
             }
         }
-        // STUB: rewards not from legacy; reward.fetchPrize/active.dailySign name is not a client RPC in legacy-ref/rpcfw/conf/Framework.cfg.php:279 ($ARR_PUBLIC_METHOD)
-        ("reward" | "active", "dailySign" | "fetchPrize") => {
+        // STUB: rewards not from legacy
+        ("reward", "dailySign") | ("active", "fetchPrize") => {
             if let Some(actor) = actor_slot.as_mut() {
                 economy::daily_sign_reward(actor, 50, 2000)
             } else {
