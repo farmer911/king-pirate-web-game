@@ -27,11 +27,11 @@ Rewrite the legacy "Vua Hai Tac 2025" (BabelTime `v298`) game server as **one Ru
 | Task | Command |
 | :--- | :--- |
 | Unit + policy tests | `cargo test` |
-| Build server binary | `cargo build` (required before `serve`; `cargo test` does not rebuild it) |
-| Run server | `cargo run -- serve` (HTTP `:8081`, WS `:8003`, TCP `:8002`, Flash policy `:843`) |
-| Build portal | `cd web && npm run build` (writes `client-assets/portal/app.js`) |
+| Build server binary | `cargo build` (required before running; `cargo test` does not rebuild it) |
+| Run server | `cargo run` (always serves: HTTP `:8081`, WS `:8003`, TCP `:8002`, Flash policy `:843`; a `serve` argument is accepted and ignored). Unported RPCs print `[UNHANDLED_RPC] <class>.<method>` to stderr |
+| Build portal | `cd web && npm install && bun run build` (writes `client-assets/portal/app.js`; needs Bun) |
 | Portal E2E | `cd web && npx playwright test` (server must be running) |
-| Env vars | `KING_PIRATE_ASSETS` (default `client-assets`), `KING_PIRATE_STORE` (default `data/pirate_store.amf3`), `KING_PIRATE_SERVE=1` |
+| Env vars | `KING_PIRATE_ASSETS` (default `client-assets`), `KING_PIRATE_STORE` (default `data/pirate_store.amf3`) |
 
 ## 4. Legacy System (ground truth)
 
@@ -53,11 +53,10 @@ Full inventory: `legacy-ref/INVENTORY.md`. Summary (measured from the extracted 
 | HTTP/WS/TCP gateway, Flash policy | `src/gateway.rs`, `src/main.rs` | done, one OS thread per connection |
 | Web portal (login, register, GM, level, fix) | `src/portal.rs`, `web/src/App.tsx` | works; session cookie is the raw username (forgeable) and passwords are stored in plain text |
 | Data store | `src/data.rs` | in-memory `BTreeMap` rows with linear scans + whole-file AMF3 snapshot; to be replaced (see plan) |
-| RPC dispatch | `src/domain/mod.rs` | about 120 match arms, most return hard-coded values; unknown RPCs silently return `[]` (`src/domain/mod.rs:706`) |
+| RPC dispatch | `src/domain/mod.rs` | 69 arms marked `// STUB:` (hard-coded or fake data, listed in `REWRITE_PLAN.md`); unknown RPCs log `[UNHANDLED_RPC]` and return `[]`. Access control checks the class only, not the method list of `Framework.cfg.php:279` (`$ARR_PUBLIC_METHOD`) |
 | Battle engine | `src/battle.rs`, `src/btstore.rs` | simplified placeholder: one flat formula, single target, no buffs; does not load the real skill table |
 | Gameplay domains | `src/domain/*.rs` | thin; most legacy modules not started |
-| Docker | `Dockerfile`, `docker-compose.yml` | broken: `CMD ["king-pirate"]` runs a demo that prints and exits (no `serve`), image has no `client-assets/`, the MariaDB service and `DATABASE_URL` are unused by the code |
-| `web/node_modules` | committed symlink | points to `/Users/phucnguyen/Dev/RentalCar/node_modules` (another project); `web/` cannot build on a fresh clone |
+| Docker | `Dockerfile`, `docker-compose.yml` | broken: image has no `client-assets/` (the binary now serves by default), the MariaDB service and `DATABASE_URL` are unused by the code |
 
 ## 6. Lessons Log (add one entry when a rule is broken or a bug escapes)
 

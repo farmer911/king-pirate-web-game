@@ -11,9 +11,5 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     headless: true,
-    launchOptions: {
-      executablePath:
-        "/Users/phucnguyen/Library/Caches/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-mac-arm64/chrome-headless-shell",
-    },
   },
 });
